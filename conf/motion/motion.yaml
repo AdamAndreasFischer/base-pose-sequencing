@@ -1,0 +1,4 @@
+robot_descriptor_file: 'base-pose-sequencing/conf/motion/robot_descriptor.yaml'
+robot_descriptor_file_left: 'base-pose-sequencing/conf/motion/robot_descriptor_left.yaml'
+robot_descriptor_file_right: 'base-pose-sequencing/conf/motion/robot_descriptor_right.yaml'
+robot_urdf_file: 'base-pose-sequencing/conf/motion/robot.urdf'

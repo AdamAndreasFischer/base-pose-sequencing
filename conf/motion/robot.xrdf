@@ -1,0 +1,150 @@
+format: "xrdf"
+
+format_version: 1.0
+
+default_joint_positions: 
+  front_rocker: 0.0
+  rear_left_wheel: 0.0
+  rear_right_wheel: 0.0
+  yumi_joint_1_l: 0.0
+  yumi_joint_1_r: 0.0
+  front_left_wheel: 0.0
+  front_right_wheel: 0.0
+  yumi_joint_2_l: -1.0
+  yumi_joint_2_r: -1.0
+  yumi_joint_7_l: -0.0002
+  yumi_joint_7_r: 0.0
+  yumi_joint_3_l: 1e-04
+  yumi_joint_3_r: 0.0
+  yumi_joint_4_l: 0.02
+  yumi_joint_4_r: -0.0
+  yumi_joint_5_l: 0.0004
+  yumi_joint_5_r: 0.0002
+  yumi_joint_6_l: 0.0002
+  yumi_joint_6_r: 1e-04
+  gripper_l_joint: 0.0
+  gripper_l_joint_m: -0.005
+  gripper_r_joint: 0.0
+  gripper_r_joint_m: 0.0
+
+cspace: 
+  joint_names: 
+    - "yumi_joint_1_l"
+    - "yumi_joint_2_l"
+    - "yumi_joint_7_l"
+    - "yumi_joint_3_l"
+    - "yumi_joint_4_l"
+    - "yumi_joint_5_l"
+    - "yumi_joint_6_l"
+    - "gripper_l_joint"
+  acceleration_limits: [10, 10, 10, 10, 10, 10, 10, 10]
+  jerk_limits: [10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000]
+
+collision: 
+  geometry: "auto_generated_collision_sphere_group"
+
+self_collision: 
+  geometry: "auto_generated_collision_sphere_group"
+  ignore: 
+    base_link: 
+      - "front_rocker_link"
+      - "rear_left_wheel_link"
+      - "rear_right_wheel_link"
+      - "yumi_link_1_l"
+      - "yumi_link_1_r"
+    front_rocker_link: 
+      - "front_left_wheel_link"
+      - "front_right_wheel_link"
+      - "rear_left_wheel_link"
+      - "rear_right_wheel_link"
+      - "yumi_link_1_l"
+      - "yumi_link_1_r"
+    yumi_link_1_l: 
+      - "yumi_link_2_l"
+      - "yumi_link_1_r"
+    yumi_link_2_l: 
+      - "yumi_link_3_l"
+    yumi_link_3_l: 
+      - "yumi_link_4_l"
+    yumi_link_4_l: 
+      - "yumi_link_5_l"
+    yumi_link_5_l: 
+      - "yumi_link_6_l"
+    yumi_link_6_l: 
+      - "yumi_link_7_l"
+    yumi_link_7_l: 
+      - "gripper_l_finger_r"
+      - "gripper_l_finger_l"
+    yumi_link_1_r: 
+      - "yumi_link_2_r"
+    yumi_link_2_r: 
+      - "yumi_link_3_r"
+    yumi_link_3_r: 
+      - "yumi_link_4_r"
+    yumi_link_4_r: 
+      - "yumi_link_5_r"
+    yumi_link_5_r: 
+      - "yumi_link_6_r"
+    yumi_link_6_r: 
+      - "yumi_link_7_r"
+    yumi_link_7_r: 
+      - "gripper_r_finger_r"
+      - "gripper_r_finger_l"
+    rear_left_wheel_link: 
+      - "rear_right_wheel_link"
+      - "yumi_link_1_l"
+      - "yumi_link_1_r"
+    rear_right_wheel_link: 
+      - "yumi_link_1_l"
+      - "yumi_link_1_r"
+    front_left_wheel_link: 
+      - "front_right_wheel_link"
+    gripper_l_finger_r: 
+      - "gripper_l_finger_l"
+    gripper_r_finger_r: 
+      - "gripper_r_finger_l"
+
+geometry: 
+  auto_generated_collision_sphere_group: 
+    spheres: 
+      yumi_link_1_l: 
+        - center: [0.0, 0.0, 0.0]
+          radius: 0.1
+        - center: [0.048, -0.055, 0.054]
+          radius: 0.1
+      yumi_link_2_l: 
+        - center: [0.0, 0.0, 0.0]
+          radius: 0.1
+        - center: [-0.062, 0.221, 0.002]
+          radius: 0.1
+        - center: [-0.021, 0.074, 0.001]
+          radius: 0.1
+        - center: [-0.042, 0.147, 0.001]
+          radius: 0.1
+      yumi_link_3_l: 
+        - center: [-0.048, 0.006, 0.062]
+          radius: 0.1
+      yumi_link_4_l: 
+        - center: [0.018, 0.092, -0.013]
+          radius: 0.1
+      yumi_link_5_l: 
+        - center: [0.034, -0.044, 0.128]
+          radius: 0.05
+        - center: [0.0, 0.0, 0.0]
+          radius: 0.05
+        - center: [0.023, -0.029, 0.085]
+          radius: 0.05
+        - center: [0.011, -0.015, 0.043]
+          radius: 0.05
+      yumi_link_6_l: 
+        - center: [0.0, 0.0, 0.0]
+          radius: 0.075
+      yumi_link_7_l: 
+        - center: [-0.0, -0.001, 0.007]
+          radius: 0.05
+        - center: [0.004, -0.004, 0.148]
+          radius: 0.05
+        - center: [0.001, -0.002, 0.054]
+          radius: 0.05
+        - center: [0.002, -0.003, 0.101]
+          radius: 0.05

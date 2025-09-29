@@ -1,0 +1,142 @@
+# The robot description defines the generalized coordinates and how to map those
+# to the underlying URDF dofs.
+
+api_version: 1.0
+
+# Defines the generalized coordinates. Each generalized coordinate is assumed
+# to have an entry in the URDF.
+# Lula will only use these joints to control the robot position.
+cspace:
+    - yumi_joint_1_l
+    - yumi_joint_2_l
+    - yumi_joint_7_l
+    - yumi_joint_3_l
+    - yumi_joint_4_l
+    - yumi_joint_5_l
+    - yumi_joint_6_l
+    - gripper_l_joint
+default_q: [
+    0.9,0.45,0,0.3,0,0,0,0
+]
+
+acceleration_limits: [
+   10,10,10,10,10,10,10,10
+]
+
+jerk_limits: [
+   10000,10000,10000,10000,10000,10000,10000,10000
+]
+
+# Most dimensions of the cspace have a direct corresponding element
+# in the URDF. This list of rules defines how unspecified coordinates
+# should be extracted or how values in the URDF should be overwritten.
+
+cspace_to_urdf_rules:
+    - {name: front_rocker, rule: fixed, value: 0.0}
+    - {name: rear_left_wheel, rule: fixed, value: 0.0}
+    - {name: rear_right_wheel, rule: fixed, value: 0.0}
+    - {name: front_left_wheel, rule: fixed, value: 0.0}
+    - {name: front_right_wheel, rule: fixed, value: 0.0}
+    - {name: gripper_l_joint_m, rule: fixed, value: 0.0}
+    - {name: gripper_r_joint_m, rule: fixed, value: 0.0}
+
+# Lula uses collision spheres to define the robot geometry in order to avoid
+# collisions with external obstacles.  If no spheres are specified, Lula will
+# not be able to avoid obstacles.
+
+collision_spheres:
+  - yumi_link_1_l:
+    - "center": [0.0, 0.0, 0.0]
+      "radius": 0.072
+    - "center": [0.048, -0.055, 0.054]
+      "radius": 0.072
+  - yumi_link_2_l:
+    - "center": [0.0, 0.0, 0.0]
+      "radius": 0.088
+    - "center": [-0.062, 0.221, 0.002]
+      "radius": 0.088
+    - "center": [-0.021, 0.074, 0.001]
+      "radius": 0.088
+    - "center": [-0.042, 0.147, 0.001]
+      "radius": 0.088
+  - yumi_link_3_l:
+    - "center": [-0.048, 0.006, 0.062]
+      "radius": 0.09
+  - yumi_link_4_l:
+    - "center": [0.018, 0.092, -0.013]
+      "radius": 0.088
+  - yumi_link_5_l:
+    - "center": [0.034, -0.044, 0.128]
+      "radius": 0.05
+    - "center": [0.0, 0.0, 0.0]
+      "radius": 0.05
+    - "center": [0.023, -0.029, 0.085]
+      "radius": 0.05
+    - "center": [0.011, -0.015, 0.043]
+      "radius": 0.05
+  - yumi_link_6_l:
+    - "center": [0.0, 0.0, 0.0]
+      "radius": 0.0675
+  - yumi_link_7_l:
+    - "center": [0.0, -0.001, 0.007]
+      "radius": 0.05
+    - "center": [0.004, -0.004, 0.148]
+      "radius": 0.05
+    - "center": [0.001, -0.002, 0.054]
+      "radius": 0.05
+    - "center": [0.002, -0.003, 0.101]
+      "radius": 0.05
+  - yumi_link_1_r:
+    - "center": [0.011, -0.024, 0.059]
+      "radius": 0.0836
+    - "center": [0.03, -0.001, 0.083]
+      "radius": 0.095
+  - yumi_link_2_r:
+    - "center": [0.0, 0.007, -0.007]
+      "radius": 0.0855
+    - "center": [-0.034, 0.146, 0.008]
+      "radius": 0.0855
+    - "center": [-0.017, 0.076, 0.001]
+      "radius": 0.0855
+  - yumi_link_3_r:
+    - "center": [-0.033, -0.038, 0.086]
+      "radius": 0.072
+  - yumi_link_4_r:
+    - "center": [0.038, 0.003, -0.026]
+      "radius": 0.05
+    - "center": [0.044, 0.138, -0.001]
+      "radius": 0.05
+    - "center": [0.033, 0.055, -0.012]
+      "radius": 0.05
+    - "center": [0.036, 0.098, -0.004]
+      "radius": 0.05
+  - yumi_link_5_r:
+    - "center": [0.0, 0.0, 0.0]
+      "radius": 0.05
+    - "center": [-0.029, -0.042, 0.092]
+      "radius": 0.05
+    - "center": [-0.01, -0.014, 0.031]
+      "radius": 0.05
+    - "center": [-0.019, -0.028, 0.061]
+      "radius": 0.05
+  - yumi_link_6_r:
+    - "center": [0.049, 0.002, -0.001]
+      "radius": 0.05
+  - yumi_link_7_r:
+    - "center": [0.0, 0.0, 0.0]
+      "radius": 0.05
+    - "center": [-0.004, 0.003, 0.141]
+      "radius": 0.05
+    - "center": [-0.001, 0.001, 0.047]
+      "radius": 0.05
+    - "center": [-0.002, 0.002, 0.094]
+      "radius": 0.05
+  - base_link:
+    - "center": [0.069, 0.0, 0.866]
+      "radius": 0.2
+    - "center": [0.197, -0.079, 0.559]
+      "radius": 0.2
+    - "center": [0.193, 0.061, 0.538]
+      "radius": 0.2
+    - "center": [0.096, 0.0, 1.152]
+      "radius": 0.15

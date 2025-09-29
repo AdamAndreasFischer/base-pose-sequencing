@@ -1,0 +1,7 @@
+discretization:
+  translation: 0.1
+  orientation: 0.7853 # 45 deg dont use, errors due to approximation
+safe_dist_from_table: 0.1
+max_dist_from_table: 0.5
+obj_safety_distance: 0.05
+save_dir: 'visual-mm-planning/data/expts/baseline3/'

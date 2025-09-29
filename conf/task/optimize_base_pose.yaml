@@ -1,0 +1,25 @@
+train:
+  initial_replay_size: 4500
+  max_replay_size: 100000
+  batch_size: 128
+  n_features: 256
+  warmup_transitions: 4500
+  tau: 0.005
+  n_steps_per_fit: 1
+  lr_alpha: 3e-4
+  lr_actor: 3e-4 
+  lr_critic: 3e-4 
+  target_entropy: -6
+  n_epochs: 200
+  n_steps_train: 4500
+  n_steps_test: 500
+  enable_q_priors: False
+  enable_action_priors: False
+  save_dir: 'visual-mm-planning/results/'
+test:
+  save_dir: 'visual-mm-planning/results/'
+  agent_name: 'optimize_base_pose_SAC_epoch_1000'
+  n_episodes: 5000
+  n_steps: 5000
+  save_data: True
+obj_safety_distance: 0.05
