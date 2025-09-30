@@ -27,7 +27,11 @@ CONFIG = {
 # Start the isaacsim application
 simulation_app = SimulationApp(launch_config=CONFIG)
 
+
+
+
 import omni.usd
+import omni
 from isaacsim.core.api import World
 from isaacsim.core.api.objects import DynamicCuboid, VisualCuboid
 from isaacsim.core.api.objects.ground_plane import GroundPlane
@@ -73,6 +77,7 @@ import time
 import random
 from shapely.geometry import Polygon, box
 import os
+from copy import deepcopy, copy
 
 # Mushroom rl imports
 from mushroom_rl.core import Environment, MDPInfo
@@ -86,10 +91,10 @@ from mushroom_rl.rl_utils.spaces import *
 # from isaaclab.assets import ArticulationCfg, AssetBaseCfg
 
 # Custom
-from visual_mm_planning.utils.collision import check_if_robot_is_in_collision, plot_polygons
+from base_pose_sequencing.utils.collision import check_if_robot_is_in_collision, plot_polygons
 from visual_mm_planning.utils.transformation import wrap_angle
 #from visual_mm_planning.utils.isaac import isaac_pose_to_transformation_matrix, pose_to_transformation_matrix, pose_to_isaac_pose
-from base_pose_sequencing.utils.isaac import isaac_pose_to_transformation_matrix, pose_to_transformation_matrix, pose_to_isaac_pose
+from base_pose_sequencing.utils.isaac import isaac_pose_to_transformation_matrix, pose_to_transformation_matrix, pose_to_isaac_pose, get_visibility_attribute, show_prim, hide_prim
 # enable websocket extension
 # enable_extension("omni.services.streamclient.websocket")
 
@@ -290,10 +295,12 @@ class Task(Environment):
         for i in obj_id:
             pose = self.objects[i].get_world_poses()
             obj_poses.append((pose[0][0], pose[1][0]))
-
+        dx, dy = 0,0
         for i,pose in enumerate(obj_poses):
-           
-            self.objects[i].set_world_poses(positions = np.array([[x[i], y[i], pose[0][2]]]),
+            if self.cfg.debug:
+                dx = i/10
+                dy = i/10
+            self.objects[i].set_world_poses(positions = np.array([[x[i]+dx, y[i]+dy, pose[0][2]]]),
                                       orientations = np.array([[base_q[i][3], base_q[i][0], base_q[i][1], base_q[i][2]]]))
         
         # NOTe: This is very important as actions are only applied after the world is stepped
@@ -301,19 +308,64 @@ class Task(Environment):
             self.world.step(render=self.cfg.render)
 
     
+    def reset_debug(self):
+
+        no_obj = len(self.objects)
+        obj_y = np.random.uniform(0 + self.cfg.task.obj_safety_distance, 
+                                  self.cfg.mdp.table_dimensions.y_max - self.cfg.task.obj_safety_distance, (no_obj,))
+        obj_x = np.random.uniform(self.cfg.mdp.table_dimensions.x_min/2 + self.cfg.task.obj_safety_distance, 
+                                  self.cfg.mdp.table_dimensions.x_max/2 - self.cfg.task.obj_safety_distance, (no_obj,))
+        obj_theta = np.random.uniform(-np.pi, np.pi, (no_obj,))
+        obj_y[2] = -0.3
+        self.reset_table_and_object()
+        self.move_object(obj_x,obj_y, obj_theta, self.object_idxs)
+
+
+        self.move_both_arms(self.yumi_default_joint_angles)
+        self.robot.set_world_pose(self.robot_debug_pose[0],self.robot_debug_pose[1])
+        while True:
+            for obstacle in self.obstacles:
+                # Randomize the position of the obstacle
+                x = random.uniform(-2.5, 2.5) 
+                y = random.uniform(-2.5, 2.5)
+
+                # Randomize orientation along z-axis
+                z_angle = random.uniform(0, 2 * np.pi)  # Random angle in radians
+                q = Rotation.from_euler('z', z_angle).as_quat()  # Convert to quaternion
+
+                obstacle.set_world_poses(positions=np.array([[x, y, 0.1]]), orientations=np.array([[q[3], q[0], q[1], q[2]]]))
+            
+            cache = bounds_utils.create_bbox_cache()
+            collision = check_if_robot_is_in_collision(cache, self.cfg.mdp.no_of_obstacles)
+
+            if not collision:
+                break
+
+        for j in range(100):
+            self.world.step(render=self.cfg.render)
+        self._state = self._get_state()
+        return self._state, {}
+
+
     def reset(self, state=None):
+
         self.world.reset(soft=True)
         no_obj = len(self.objects)
         self.object_idxs = np.arange(no_obj)
-        
+        self.picked = np.ones((len(self.objects),1),dtype=np.uint8)
+        for obj in self.objects:
+            show_prim(self.stage, obj.prim_paths[0])
+        if self.cfg.debug:
+            self._state, dicts = self.reset_debug()
+            return self._state, dicts
+
         obj_y = np.random.uniform(self.cfg.mdp.table_dimensions.y_min + self.cfg.task.obj_safety_distance, 
                                   self.cfg.mdp.table_dimensions.y_max - self.cfg.task.obj_safety_distance, (no_obj,))
         obj_x = np.random.uniform(self.cfg.mdp.table_dimensions.x_min + self.cfg.task.obj_safety_distance, 
                                   self.cfg.mdp.table_dimensions.x_max - self.cfg.task.obj_safety_distance, (no_obj,))
         obj_theta = np.random.uniform(-np.pi, np.pi, (no_obj,))
-
-        print(obj_y.shape)
-
+        
+        
         self.reset_table_and_object()
 
         self.move_object(obj_x, obj_y, obj_theta, self.object_idxs)
@@ -331,21 +383,10 @@ class Task(Environment):
             obj_rot = new_obj_pose[3:,:].T
             obj_x = new_obj_pose[0,:]
             obj_y = new_obj_pose[1,:]
-            print("X_pose")
-            print(obj_x)
-            print("Y-pose")
-            print(obj_y)
-            print("Rot")
-            print(obj_rot.T)
-            print(obj_rot.shape)
+      
             obj_theta = Rotation.from_quat(obj_rot).as_euler('xyz')
-            print(obj_theta.shape)
-            print(obj_theta)
-        print("######### Objects actual rot ############")
-        for i in range(no_obj):
-            pose = self.objects[i].get_world_poses()
-            r = Rotation.from_quat(pose[1][0])
-            print(r.as_euler("xyz", degrees=True))
+     
+     
         
         while True:
             for obstacle in self.obstacles:
@@ -365,7 +406,7 @@ class Task(Environment):
             self.move_robot(r_x, r_y, r_theta)
 
             cache = bounds_utils.create_bbox_cache()
-            collision = check_if_robot_is_in_collision(cache)
+            collision = check_if_robot_is_in_collision(cache,self.cfg.mdp.no_of_obstacles)
 
             if not collision:
                 break
@@ -541,7 +582,7 @@ class Task(Environment):
         tw = self.cfg.mdp.table_dimensions.x_max + self.cfg.mdp.safe_dist_from_table
 
         cache = bounds_utils.create_bbox_cache()
-        collision = check_if_robot_is_in_collision(cache)
+        collision = check_if_robot_is_in_collision(cache,self.cfg.mdp.no_of_obstacles)
 
         if collision:
             # plot_polygons(cache)
@@ -551,33 +592,47 @@ class Task(Environment):
             # goal_status = True
             return reward, goal_status
         
-        grasp_pose = self._get_grasp_pose(0)
-    
-        arm_id = self.select_robot_arm_for_grasping(0)
+        # Can not deepcopy prims
+        picked_objects = []
+        for id,obj in enumerate(self.objects):
+            grasp_pose = self._get_grasp_pose(id)
+         
+            #grasp_poses.append((grasp_pose, obj)) # Tuple to keep track of object and corresponding pose
 
-        robot_base_translation,robot_base_orientation = self.robot.get_world_pose()
-        
-        target_pos = np.array([grasp_pose[0], grasp_pose[1], grasp_pose[2]])
-        target_rot = np.array([grasp_pose[6], grasp_pose[3], grasp_pose[4], grasp_pose[5]])
+            print(grasp_pose)
 
-        success = False
-        if arm_id == 0:
-            self.lula_kinematics_solver_left.set_robot_base_pose(robot_base_translation, robot_base_orientation)
-            action, success = self.articulation_kinematics_solver_left.compute_inverse_kinematics(target_pos, target_rot)
-        else:
-            self.lula_kinematics_solver_right.set_robot_base_pose(robot_base_translation, robot_base_orientation)
-            action, success = self.articulation_kinematics_solver_right.compute_inverse_kinematics(target_pos, target_rot)
-        
-        if success:
-            self.robot.apply_action(action)
-            reward = 100
-        else:
-            reward = 0
-            # print("IK did not converge to a solution.  No action is being taken")
+            arm_id = self.select_robot_arm_for_grasping(id)
 
-        for j in range(self.cfg.render_steps):
-            # time.sleep(0.01)
-            self.world.step(render=True)
+            robot_base_translation,robot_base_orientation = self.robot.get_world_pose()
+
+            target_pos = np.array([grasp_pose[0], grasp_pose[1], grasp_pose[2]])
+            target_rot = np.array([grasp_pose[6], grasp_pose[3], grasp_pose[4], grasp_pose[5]])
+
+            success = False
+            if arm_id == 0:
+                self.lula_kinematics_solver_left.set_robot_base_pose(robot_base_translation, robot_base_orientation)
+                action, success = self.articulation_kinematics_solver_left.compute_inverse_kinematics(target_pos, target_rot)
+            else:
+                self.lula_kinematics_solver_right.set_robot_base_pose(robot_base_translation, robot_base_orientation)
+                action, success = self.articulation_kinematics_solver_right.compute_inverse_kinematics(target_pos, target_rot)
+            print(action)
+            print(success)
+            if success:
+                self.robot.apply_action(action)
+                reward += 100
+                picked_objects.append(obj)
+                
+            else:
+                reward += 0
+                pass
+                # print("IK did not converge to a solution.  No action is being taken")
+
+            for j in range(self.cfg.render_steps):
+                # time.sleep(0.01)
+                self.world.step(render=True)
+        # Turns prims invisible for next step
+        for p_obj in picked_objects:
+            hide_prim(self.stage, p_obj.prim_paths[0])
 
         return reward, goal_status
     
@@ -753,12 +808,12 @@ class Task(Environment):
         #     sys.exit()
 
         # Add Light Source
-        stage = omni.usd.get_context().get_stage()
+        self.stage = omni.usd.get_context().get_stage()
         # distantLight = UsdLux.DistantLight.Define(stage, Sdf.Path("/DistantLight"))
         # distantLight.CreateIntensityAttr(300)
         # distantLight.GetShadowEnableAttr().Set(False)
 
-        domeLight = UsdLux.DomeLight.Define(stage, Sdf.Path("/DomeLight"))
+        domeLight = UsdLux.DomeLight.Define(self.stage, Sdf.Path("/DomeLight"))
         domeLight.CreateIntensityAttr(2000)  # Set intensity
         # domeLight.CreateTextureFileAttr('/home/lakshadeep/abandoned_greenhouse_1k.hdr')  # Optional: Set HDRI texture file path for environment lighting
 
@@ -783,11 +838,17 @@ class Task(Environment):
         self.robot = SingleArticulation(prim_path="/World/Robot", name="robot")  # create an articulation object
         UsdPhysics.ArticulationRootAPI.Apply(omni.usd.get_prim_at_path("/World/Robot"))
 
-
-        self.robot.set_world_pose(position=np.array([0.0, 1.0, 0.0]) / get_stage_units())
-        print(type(self.robot))
-        print("##### Seting up scene ######")
-        print(omni.usd.get_prim_descendents(omni.usd.get_prim_at_path("/World/Robot")))
+        if self.cfg.debug:
+            quat_rot = Rotation.from_euler('xyz', [0 ,0 ,-90], degrees=True).as_quat()
+            quat = [quat_rot[3], quat_rot[0], quat_rot[1], quat_rot[2]]
+            self.robot.set_world_pose(position=np.array([0.0, 1.0, 0.0]) / get_stage_units(), orientation = quat)
+            self.robot_debug_pose = self.robot.get_world_pose()
+            print(type(self.robot))
+            print("##### Seting up scene ######")
+            print(omni.usd.get_prim_descendents(omni.usd.get_prim_at_path("/World/Robot")))
+        else:
+            self.robot.set_world_pose(position=np.array([0.0, 1.0, 0.0]) / get_stage_units())
+        
         #add_update_semantics(omni.usd.get_prim_at_path("/World/Robot"), semantic_label= "robot",type_label= 'class')
 
         # Lula Kinematics solver
@@ -836,7 +897,7 @@ class Task(Environment):
         # One possible solution could be join multiple blocks together
         # self.table.set_local_scales(np.array([[0.5, 0.5, 0.5]]))
 
-        no_of_objects = 1
+        no_of_objects = self.cfg.mdp.no_of_objects
         table_z_offset = 0.5
         self.objects = []
         suffix = ".usd"
