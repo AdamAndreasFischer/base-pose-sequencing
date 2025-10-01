@@ -5,16 +5,18 @@ mdp:
   no_of_action_channels: 8
   width: 160
   height: 160
-  no_of_obstacles: 5
+  no_of_obstacles: 0
+  no_of_objects: 5
   table_dimensions:
     x_min: -0.8
     x_max: 0.8
     y_min: -0.4
     y_max: 0.4
   safe_dist_from_table: 0.1
+debug: False
 render: True
-render_steps: 1 #30 #10
-randomize: False
+render_steps: 80 #30 #10
+randomize: True
 path_prefix: '/home/adamfi/codes/'
 # path_prefix: '/'    # for berzelius apptainer
 robot_usd_file: 'ridgeback_yumi/ridgeback_yumi.usd'

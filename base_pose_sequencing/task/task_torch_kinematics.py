@@ -2,27 +2,27 @@
 from isaacsim import SimulationApp
 
 # This enables a livestream server to connect to when running headless
-CONFIG = {
-   # "renderer": "Storm",
-   "width": 1280,
-   "height": 720,
-   "window_width": 1920,
-   "window_height": 1080,
-   "headless": False,
-   "renderer": "RayTracedLighting",
-   # "display_options": 3286,  # Set display options to show default grid,
-}
-
 #CONFIG = {
-#    # "renderer": "Storm",
-#    "width": 320,
-#    "height": 320,
-#    "window_width": 640, 
-#    "window_height": 480,
-#    "headless": True,
-#    "renderer": "RayTracedLighting",
-#    # "display_options": 3286,  # Set display options to show default grid,
+#   # "renderer": "Storm",
+#   "width": 1280,
+#   "height": 720,
+#   "window_width": 1920,
+#   "window_height": 1080,
+#   "headless": False,
+#   "renderer": "RayTracedLighting",
+#   # "display_options": 3286,  # Set display options to show default grid,
 #}
+
+CONFIG = {
+    # "renderer": "Storm",
+    "width": 320,
+    "height": 320,
+    "window_width": 640, 
+    "window_height": 480,
+    "headless": True,
+    "renderer": "RayTracedLighting",
+    # "display_options": 3286,  # Set display options to show default grid,
+}
 
 # Start the isaacsim application
 simulation_app = SimulationApp(launch_config=CONFIG)
@@ -96,6 +96,7 @@ from base_pose_sequencing.utils.collision import check_if_robot_is_in_collision,
 from visual_mm_planning.utils.transformation import wrap_angle
 #from visual_mm_planning.utils.isaac import isaac_pose_to_transformation_matrix, pose_to_transformation_matrix, pose_to_isaac_pose
 from base_pose_sequencing.utils.isaac import isaac_pose_to_transformation_matrix, pose_to_transformation_matrix, pose_to_isaac_pose, get_visibility_attribute, show_prim, hide_prim
+from base_pose_sequencing.utils.torch_kinematics import torch_joint_pose
 # enable websocket extension
 # enable_extension("omni.services.streamclient.websocket")
 
@@ -182,10 +183,16 @@ class Task(Environment):
         self.predicted_base_pose = None
         self.deltas = [0,0,0]
         self.theta_in_world = 0
+
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
         
 
         # Yumi default joint angles in radians
         self.yumi_default_joint_angles = [1.5,-1.5,0.15,0.15,-0.45,0.45,0.3,0.3,0,0,0,0,0,0]
+
+        # Joint angles for torch IK
+        self.init_config_r = torch.tensor([[-1.5,0.15,0.45,0.3,0,0,0]],device=self.device)
+        self.init_config_l= torch.tensor([[1.5,0.15,-0.45,0.3,0,0,0]],device=self.device)
         
         # Object trackers
         self.object_idxs = None # List of object idxes
@@ -767,36 +774,65 @@ class Task(Environment):
 
 
     def select_robot_arm_for_grasping(self, obj_id):
-        obj_poses = self.objects[obj_id].get_world_poses()
-        obj_pose_in_world = (obj_poses[0][0], obj_poses[1][0])
+        """Multi object capable"""
+       
+        obj_poses = torch.zeros((len(self.objects), 3), device=self.device, dtype=torch.float32)
+        for i,obj in enumerate(self.objects):
+            pose = obj.get_world_poses()
+            trans = pose[0]
+            obj_poses[i] = torch.from_numpy(trans)
+        
+        
+        print(obj_poses.shape)
+        #obj_pose_in_world = (obj_poses[0][0], obj_poses[1][0])
 
         robot_pose_in_world = self.robot.get_world_pose()
 
-        wTr = isaac_pose_to_transformation_matrix(robot_pose_in_world)
-        wTo = isaac_pose_to_transformation_matrix(obj_pose_in_world)
+        #wTr = isaac_pose_to_transformation_matrix(robot_pose_in_world)
+        #wTo = isaac_pose_to_transformation_matrix(obj_pose_in_world)
 
-        rTo = np.matmul(np.linalg.inv(wTr), wTo)
-        obj_pose_in_robot = (rTo[0,3], rTo[1,3], rTo[2,3])
+        #rTo = np.matmul(np.linalg.inv(wTr), wTo)
+        #obj_pose_in_robot = (rTo[0,3], rTo[1,3], rTo[2,3])
 
         # print(self.lula_kinematics_solver_left.get_joint_names())
         # print(self.lula_kinematics_solver_right.get_joint_names())
 
-        self.lula_kinematics_solver_left.set_robot_base_pose(robot_pose_in_world[0], robot_pose_in_world[1])
-        self.lula_kinematics_solver_right.set_robot_base_pose(robot_pose_in_world[0], robot_pose_in_world[1])
+        #self.lula_kinematics_solver_left.set_robot_base_pose(robot_pose_in_world[0], robot_pose_in_world[1])
+        #self.lula_kinematics_solver_right.set_robot_base_pose(robot_pose_in_world[0], robot_pose_in_world[1])
 
-        ee_left_robot, ee_rot_mat_left = self.articulation_kinematics_solver_left.compute_end_effector_pose()
-        ee_right_robot, ee_rot_mat_right = self.articulation_kinematics_solver_right.compute_end_effector_pose()
+        rob_tf = pk.Transform3d(pos=robot_pose_in_world[0], rot=robot_pose_in_world[1],device=self.device)
+        ee_left_robot, ee_rot_mat_left = torch_joint_pose(self.left_chain, rob_tf, self.init_config_l, self.device)
+        ee_right_robot, ee_rot_mat_right = torch_joint_pose(self.right_chain, rob_tf, self.init_config_r, self.device)
+        
+    
+        ee_left_batch = ee_left_robot.repeat(5,1)
+        
+        
+        #j,pose_r = self.right_chain.jacobian(self.init_config_r, ret_eef_pose = True)
+#
+        #pTb = pk.transform3d.Transform3d(matrix=pose_r, device=self.device) #pose to base
+        #j,pose_l = self.left_chain.jacobian(self.init_config_l, ret_eef_pose = True)
+        #pTb_l = pk.transform3d.Transform3d(matrix=pose_l, device=self.device)
+        #pTw = rob_tf.compose(pTb)
+        #pTw_l = rob_tf.compose(pTb_l)
+    
 
-        l_dist = np.linalg.norm(ee_left_robot - obj_pose_in_world[0])
-        r_dist = np.linalg.norm(ee_right_robot - obj_pose_in_world[0])
+        #e_left_robot, ee_rot_mat_left = self.articulation_kinematics_solver_left.compute_end_effector_pose()
+        #ee_right_robot, ee_rot_mat_right = self.articulation_kinematics_solver_right.compute_end_effector_pose()
+        #print(ee_left_robot)
+        #print(ee_right_robot)
+
+
+        l_dist = torch.linalg.norm(ee_left_robot - obj_poses)
+        r_dist = torch.linalg.norm(ee_right_robot - obj_poses)
+        
 
         # print("Left arm distance:", l_dist)
         # print("Right arm distance:", r_dist)
 
-        if l_dist < r_dist:
-            return 0
-        else:
-            return 1
+        # Zero if left, one if right 
+        l_o_r = (l_dist<r_dist).to(torch.uint8).to(self.device)
+        return l_o_r
         
 
     def _set_up_scene(self) -> None:
@@ -853,6 +889,51 @@ class Task(Environment):
             self.robot.set_world_pose(position=np.array([0.0, 1.0, 0.0]) / get_stage_units())
         
         #add_update_semantics(omni.usd.get_prim_at_path("/World/Robot"), semantic_label= "robot",type_label= 'class')
+        # Torch kinematics Solver
+
+        #Robot descriptor chains
+        self.left_chain = pk.build_serial_chain_from_urdf(
+            data=open(self.cfg.path_prefix+self.cfg.motion.robot_urdf_file).read(),
+            end_link_name="gripper_l_base"
+        )
+        self.left_chain.to(device=self.device)
+
+        self.right_chain = pk.build_serial_chain_from_urdf(
+            data=open(self.cfg.path_prefix+self.cfg.motion.robot_urdf_file).read(),
+            end_link_name="gripper_r_base"
+        )
+        #print(self.right_chain.get_joint_parent_frame_names(exclude_fixed=False))
+        #print(self.right_chain.print_tree())
+        #print(self.right_chain.get_joints(exclude_fixed=False))
+        #print("##################################")
+        #print(self.right_chain.get_joints())
+        #print(self.right_chain.find_joint("gripper_r_base"))
+       
+        self.right_chain.to(device=self.device)
+        
+        #robot_pose_in_world = self.robot.get_world_pose()
+        #rob_tf = pk.Transform3d(pos=robot_pose_in_world[0], rot=robot_pose_in_world[1], device=self.device)
+        #pose = torch_joint_pose(self.right_chain, "yumi_joint_7_r",rob_tf)
+        #print(pose)
+        # Joint limits
+        lim_r = torch.tensor(self.right_chain.get_joint_limits(), device=self.device)
+        lim_l = torch.tensor(self.left_chain.get_joint_limits(), device=self.device)
+        #[1.5,-1.5,0.15,0.15,-0.45,0.45,0.3,0.3,0,0,0,0,0,0]
+        
+
+        self.torch_kinematics_solver_left = pk.PseudoInverseIK(self.left_chain, max_iterations=30, 
+                                                               retry_configs=self.init_config_l, 
+                                                               joint_limits=lim_l.T,
+                                                               early_stopping_any_converged=True, 
+                                                               early_stopping_no_improvement="all", 
+                                                               lr=0.2)
+        self.torch_kinematics_solver_right = pk.PseudoInverseIK(self.right_chain, max_iterations=30, 
+                                                        retry_configs=self.init_config_r,
+                                                        joint_limits=lim_r.T,
+                                                        early_stopping_any_converged=True, 
+                                                        early_stopping_no_improvement="all", 
+                                                        lr=0.2)
+        
 
         # Lula Kinematics solver
         self.lula_kinematics_solver_left = LulaKinematicsSolver(
@@ -873,6 +954,8 @@ class Task(Environment):
             robot_description_path = self.cfg.path_prefix + self.cfg.motion.robot_descriptor_file,
             urdf_path = self.cfg.path_prefix + self.cfg.motion.robot_urdf_file
         )
+
+        
 
         # NOTE
         # VisualCuboid - no collision 
@@ -921,9 +1004,9 @@ class Task(Environment):
             exists = os.path.exists(self.cfg.path_prefix+obst_path)
 
             if not exists:
-                print(f"There are only {i} unique cube usd files. Create more for more obstacles", "\n")
-                print(f"Using only {i} objects")
-                continue
+                print(f"There are only {i-1} unique cube usd files. Create more for more obstacles", "\n")
+                print(f"Using only {i-1} objects")
+                break
             add_reference_to_stage(usd_path=self.cfg.path_prefix + obst_path, prim_path="/World/obj" + str(i))
             obj = XFormPrim("/World/obj" + str(i), name="obj" + str(i))
             obj.set_world_poses(positions=np.array([[0.5, -0.35, table_z_offset+0.05]]), orientations=np.array([[0, 0, 0, 1]]))
