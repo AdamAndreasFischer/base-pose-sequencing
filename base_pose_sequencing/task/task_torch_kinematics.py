@@ -363,7 +363,7 @@ class Task(Environment):
             if not collision:
                 break
 
-        for j in range(100):
+        for j in range(self.cfg.render_steps):
             self.world.step(render=self.cfg.render)
         self._state = self._get_state()
         return self._state, {}
@@ -434,7 +434,7 @@ class Task(Environment):
             if not collision:
                 break
 
-        for j in range(1):#self.cfg.render_steps):
+        for j in range(self.cfg.render_steps):#self.cfg.render_steps):
             self.world.step(render=self.cfg.render)
         self._state = self._get_state()
        
@@ -633,13 +633,14 @@ class Task(Environment):
         #no_obj = len(self.objects)
         picked_objects = []
         
-     
         n_picked = np.count_nonzero(self.picked)
         no_obj = len(self.objects) - n_picked
         obj_order = torch.zeros((no_obj,),dtype=torch.int, device=self.device)
         poses_world =torch.zeros((no_obj,7),device=self.device)
         # Extract object poses in world frame
         j = 0
+
+        # TODO: Make more effective if needed
         for i,obj in enumerate(self.objects):
             if self.picked[i] ==1:
                 continue
@@ -659,7 +660,6 @@ class Task(Environment):
 
         #robot_base_translation,robot_base_orientation = self.robot.get_world_pose()
         
-       
         l_target_pos = grasp_matrices[left_mask]
         l_obj_id = obj_order[left_mask]
         r_target_pos = grasp_matrices[right_mask]
@@ -669,7 +669,6 @@ class Task(Environment):
         exists_r = False
         exists_l = False
         
-       
         #Torch IK produces low error ee-poses, however, visualization is a bit strange still. 
         if l_target_pos.shape[0]>0:
             l_targets = pk.transform3d.Transform3d(default_batch_size=l_target_pos.shape[0], matrix=l_target_pos)
@@ -710,58 +709,7 @@ class Task(Environment):
         else:
             picked_objects = torch.tensor(())
 
-        ## For debug only
-        #for i, arm_id_int in enumerate(arm_id):
-        #    target_pos = np.array([grasp_poses[i][0].cpu(), grasp_poses[i][1].cpu(), grasp_poses[i][2].cpu()])
-        #    target_rot = np.array([grasp_poses[i][3].cpu(), grasp_poses[i][4].cpu(), grasp_poses[i][5].cpu(),grasp_poses[i][6].cpu()])
-        #    if arm_id_int == 1:
-        #        self.lula_kinematics_solver_left.set_robot_base_pose(robot_base_translation, robot_base_orientation)
-        #        action, success = self.articulation_kinematics_solver_left.compute_inverse_kinematics(target_pos, target_rot)
-        #    else:
-        #        self.lula_kinematics_solver_right.set_robot_base_pose(robot_base_translation, robot_base_orientation)
-        #        action, success = self.articulation_kinematics_solver_right.compute_inverse_kinematics(target_pos, target_rot)
-        #    print(success)
-           
  
-        #robot_base_translation, robot_base_orientation = self.robot.get_world_pose()
-        #START: debugg
-        #print("Torch kinematics")
-        #rob_tf = pk.Transform3d(pos=robot_base_translation, rot=robot_base_orientation,device=self.device)
-
-        
-        #if exists_l:
-        #    for i,action in enumerate(action_l):
-        #        print(action)
-        #        #ee_left_robot, ee_rot_mat_left = torch_joint_pose(self.left_chain, rob_tf, action.squeeze(), self.device)
-        #        full_config = assemble_full_configuration(self.robot_chain, (self.left_chain,action.to(device=self.device)), (self.right_chain, self.right_default)).to(device=self.device)
-        #        yumi_pose = self.robot.get_world_pose()
-        #        yumi_pos, yumi_rot = yumi_pose[0],yumi_pose[1]
-     #
-        #        wTy = pk.transform3d.Transform3d(pos=torch.tensor(yumi_pos, device=self.device),rot= torch.tensor(yumi_rot, device=self.device),device=self.device)
-#
-        #        _,ee_left_robot = find_ee_poses(full_chain=self.robot_chain, rob_tf=wTy, joint_angles=full_config, device=self.device)
-#
-        #        print(f"left translation in world {i}: ",ee_left_robot)
-#
-        #if exists_r:
-        #    for i,action in enumerate(action_r):
-        #        print(action)
-        #        full_config = assemble_full_configuration(self.robot_chain, (self.left_chain,self.left_default), (self.right_chain, action.to(device=self.device))).to(device=self.device)
-        #        yumi_pose = self.robot.get_world_pose()
-        #        yumi_pos, yumi_rot = yumi_pose[0],yumi_pose[1]
-        #        print(action.squeeze().shape)
-        #        print(self.right_default.shape)
-        #        wTy = pk.transform3d.Transform3d(pos=torch.tensor(yumi_pos, device=self.device),rot= torch.tensor(yumi_rot, device=self.device),device=self.device)
-        #     
-        #        ee_right_robot,_ = find_ee_poses(self.robot_chain, wTy, joint_angles=full_config, device=self.device)
-        #        print(f"right translation in world {i}: ",ee_right_robot)
-#
-        #print("Object poses")
-        #for obj in self.objects:
-        #    print(obj.get_world_poses()[0])
-        #END: debugg    
-    
-       
         if exists_r:
             for action in action_r:
                 action_nump = action.squeeze().cpu().numpy()
@@ -819,8 +767,8 @@ class Task(Environment):
         if np.count_nonzero(self.picked) == len(self.objects):
             goal_status = True
         
-        
-        self.world.step(render=True)
+        for j in range(self.cfg.render_steps): 
+            self.world.step(render=True)
         return reward, goal_status
     
 
@@ -1128,7 +1076,6 @@ class Task(Environment):
         self.camera.add_bounding_box_2d_tight_to_frame()
         self.camera.add_semantic_segmentation_to_frame()
 
-
         self.obstacles = []
 
         # Add obstacles to the scene
@@ -1158,7 +1105,6 @@ class Task(Environment):
             obstacle.set_local_scales(np.array([[0.5, 0.5, 0.5]]))
 
             self.obstacles.append(obstacle)
-
 
         # NOTE: not significant increase in RAM usage with below, so problem proabably lies in the mushroom rl
         # Code below can be used to test camera calibration

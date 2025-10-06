@@ -13,11 +13,12 @@ mdp:
     y_min: -0.4
     y_max: 0.4
   safe_dist_from_table: 0.1
-debug: False
+debug: True
 visualize: True
 render: True
-render_steps: 1 #30 #10
-randomize: True
+render_steps: 30 #Lowest possible render steps for objects to dissapear
+
+randomize: False
 path_prefix: '/home/adamfi/codes/'
 # path_prefix: '/'    # for berzelius apptainer
 robot_usd_file: 'ridgeback_yumi/ridgeback_yumi.usd'
