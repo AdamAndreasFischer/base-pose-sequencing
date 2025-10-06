@@ -434,7 +434,7 @@ class Task(Environment):
             if not collision:
                 break
 
-        for j in range(100):
+        for j in range(1):#self.cfg.render_steps):
             self.world.step(render=self.cfg.render)
         self._state = self._get_state()
        
@@ -563,54 +563,34 @@ class Task(Environment):
 
         # print("Robot pose in world orignal:", self.robot.get_world_pose())
         #robot_poses = self.yumi_base_link.get_world_poses()
+
+        #Yumi body pose for finding object pose in robot frame for grippers. 
         yumi_pose_in_world = self.yumi_body_link.get_world_poses()
         yumi_pos, yumi_rot = yumi_pose_in_world[0][0], yumi_pose_in_world[1][0]
+
         robot_poses_ridgeback = self.robot.get_world_pose()
         #robot_pose_in_world = (robot_poses[0][0], robot_poses[1][0])
         ridgeback_pose_in_world = (robot_poses_ridgeback[0], robot_poses_ridgeback[1])
-        # print("Robot pose in world:", robot_pose_in_world)
-        #print(ridgeback_pose_in_world)
         grasp_offsets = self.cfg.grasp_poses.cube.top
-        
-
+    
         # print("Object pose in world:", obj_pose_in_world)
 
         grasp_pose_o_tran = [grasp_offsets.x_tran, grasp_offsets.y_tran, grasp_offsets.z_tran]
         grasp_pose_o_rot = Rotation.from_euler('xyz', [grasp_offsets.x_rot, grasp_offsets.y_rot, grasp_offsets.z_rot]).as_quat()
-        #grasp_pose_o = np.hstack((grasp_pose_o_tran, grasp_pose_o_rot))
 
         sf_grasp_o_rot = np.array([grasp_pose_o_rot[3], grasp_pose_o_rot[0],grasp_pose_o_rot[1], grasp_pose_o_rot[2]]) #Scalar first
-        #Torch kinematics needs quaternions in wxyz
+
+        # Find transform from world to goal
         oTg_arr = pk.transform3d.Transform3d(rot=sf_grasp_o_rot, pos=grasp_pose_o_tran, device=self.device)#
         wTo_arr = pk.transform3d.Transform3d(pos=poses_world[:,:3], rot=poses_world[:,3:], default_batch_size=n_obj, device=self.device)
         wTg_arr = wTo_arr.compose(oTg_arr)
         
-        # Lula
-        #oTg = pose_to_transformation_matrix(grasp_pose_o)
-        #wTo = isaac_pose_to_transformation_matrix(obj_pose_in_world)
-        #wTg = np.matmul(wTo, oTg)
-        
-        # Torch kinematics
+        # Find transform from robot to goal
         wTr_arr = pk.transform3d.Transform3d(pos=yumi_pos, rot=yumi_rot,device=self.device)
         rTw_arr = wTr_arr.inverse()
         rTg_arr = rTw_arr.compose(wTg_arr) #Pytorch IK expects the goal in robot frame. 
         
-        print(wTg_arr)
-        print(wTr_arr.compose(rTg_arr)) 
-        print(wTr_arr[0])
-        
-        #print("TORCH rTg: ", rTg_arr.get_matrix())
-        # Lula
-        #wTr = isaac_pose_to_transformation_matrix(robot_pose_in_world)    # robot base frame
-        #rTw = np.linalg.inv(wTr)
-        #rTg = np.matmul(rTw, wTg)
-        
-        #print("LULA rTg: ", rTg)
-        #print("LULA wTg: ", wTg)
-        #quat = Rotation.from_matrix(rTg[:3,:3]).as_quat()
-        #print("quat: ", quat)
-        #grasp_pose = np.array([rTg[0,3], rTg[1,3], rTg[2,3], quat[0], quat[1], quat[2], quat[3]])
-
+ 
         #print("robot frame grasp pose: ", grasp_pose)
         matrices_rTg = rTg_arr.get_matrix()
         matrices = wTg_arr.get_matrix()
@@ -633,9 +613,9 @@ class Task(Environment):
         # This doesnt work as its not supported by Mushroom RL
         # goal_status = np.full((1, self.cfg.mdp.no_of_action_channels * self.cfg.mdp.width * self.cfg.mdp.height), True, dtype=bool)  # Fill with True by default
 
-        robot_pose = self.robot.get_world_pose()
-        table_poses = self.table.get_world_poses()
-        table_pose = (table_poses[0][0], table_poses[1][0])
+        #robot_pose = self.robot.get_world_pose()
+        #table_poses = self.table.get_world_poses()
+        #table_pose = (table_poses[0][0], table_poses[1][0])
 
         #tl = self.cfg.mdp.table_dimensions.y_max + self.cfg.mdp.safe_dist_from_table
         #tw = self.cfg.mdp.table_dimensions.x_max + self.cfg.mdp.safe_dist_from_table
@@ -644,11 +624,8 @@ class Task(Environment):
         collision = check_if_robot_is_in_collision(cache,self.cfg.mdp.no_of_obstacles)
 
         if collision:
-            # plot_polygons(cache)
-            # print("Collision detected")
-            # input("Press enter to continue")
             reward = -100
-            # goal_status = True
+            goal_status = True
             return reward, goal_status
         
         # Can not deepcopy prims
@@ -656,13 +633,11 @@ class Task(Environment):
         #no_obj = len(self.objects)
         picked_objects = []
         
-        #obj_order = torch.zeros((no_obj,), dtype=torch.int)
-        #obj_order = torch.arange(0,len(self.objects), dtype=torch.int, device=self.device)
-        
+     
         n_picked = np.count_nonzero(self.picked)
         no_obj = len(self.objects) - n_picked
         obj_order = torch.zeros((no_obj,),dtype=torch.int, device=self.device)
-        poses_world =torch.zeros((no_obj,7))
+        poses_world =torch.zeros((no_obj,7),device=self.device)
         # Extract object poses in world frame
         j = 0
         for i,obj in enumerate(self.objects):
@@ -675,36 +650,22 @@ class Task(Environment):
             poses_world[j]=fin_pose
             obj_order[j] = j
             j+=1
-            #print(obj.name)
-        
-        #print(poses_world)
-        #print(obj_order)
-        print(no_obj)
-        print(poses_world.shape)
+           
         grasp_poses, grasp_matrices = self._get_grasp_pose(poses_world, no_obj) # [N,7]
         
-      
         arm_id = self.select_robot_arm_for_grasping(poses=poses_world, no_obj=no_obj)
         left_mask = arm_id==1
         right_mask = arm_id==0
 
-        #arm_id_int = arm_id.item()
-
-        #print("Arm id: ", arm_id)
-
-        robot_base_translation,robot_base_orientation = self.robot.get_world_pose()
+        #robot_base_translation,robot_base_orientation = self.robot.get_world_pose()
         
-        #print("shape of grasp poses: ",grasp_matrices.shape)
+       
         l_target_pos = grasp_matrices[left_mask]
         l_obj_id = obj_order[left_mask]
         r_target_pos = grasp_matrices[right_mask]
         r_obj_id = obj_order[right_mask]
-        #print(r_target_pos.shape)
-        #print(l_target_pos.shape)
-
-        #print("Left targe_pose: ",l_target_pos)
-        #print("Right target pose: ", r_target_pos)
-        success = torch.zeros((no_obj,),dtype=torch.uint8)
+       
+        #success = torch.zeros((no_obj,),dtype=torch.uint8)
         exists_r = False
         exists_l = False
         
@@ -713,12 +674,13 @@ class Task(Environment):
         if l_target_pos.shape[0]>0:
             l_targets = pk.transform3d.Transform3d(default_batch_size=l_target_pos.shape[0], matrix=l_target_pos)
             solution = self.left_kinematics_solver.solve(l_targets)
-            successes,left_configs = _summarize_results(self.left_chain, solution, targets=l_targets, arm_name="Left")
-            #action_l = solution.solutions
-            #success_l = solution.converged
+            _,left_configs = _summarize_results(self.left_chain, solution, targets=l_targets, arm_name="Left")
+           
+            
             action_l = left_configs
             success_l = solution.converged_any
             done_l = l_obj_id[success_l==True]
+            
             if done_l.ndim ==1:
                 done_l = done_l.unsqueeze(0)
             if torch.any(success_l!=False).item():
@@ -727,17 +689,18 @@ class Task(Environment):
         if r_target_pos.shape[0]>0:
             r_targets = pk.transform3d.Transform3d(default_batch_size=r_target_pos.shape[0], matrix=r_target_pos)
             solution = self.right_kinematics_solver.solve(r_targets)
-            successes,right_configs = _summarize_results(self.right_chain, solution, targets=r_targets, arm_name="Right")
+            _,right_configs = _summarize_results(self.right_chain, solution, targets=r_targets, arm_name="Right")
+            
             action_r = right_configs
             success_r = solution.converged_any
             done_r = r_obj_id[success_r==True]
+            
             if done_r.ndim==1:
                 done_r = done_r.unsqueeze(0)
             if torch.any(success_r!=False).item():
                 exists_r=True
 
 
-        
         if exists_l and exists_r:
             picked_objects = torch.cat((done_l, done_r),dim=1).reshape(-1)
         elif exists_l: 
@@ -747,64 +710,58 @@ class Task(Environment):
         else:
             picked_objects = torch.tensor(())
 
-        print(picked_objects.shape)
-        print(picked_objects)
         ## For debug only
-        for i, arm_id_int in enumerate(arm_id):
-            target_pos = np.array([grasp_poses[i][0].cpu(), grasp_poses[i][1].cpu(), grasp_poses[i][2].cpu()])
-            target_rot = np.array([grasp_poses[i][3].cpu(), grasp_poses[i][4].cpu(), grasp_poses[i][5].cpu(),grasp_poses[i][6].cpu()])
-            if arm_id_int == 1:
-                self.lula_kinematics_solver_left.set_robot_base_pose(robot_base_translation, robot_base_orientation)
-                action, success = self.articulation_kinematics_solver_left.compute_inverse_kinematics(target_pos, target_rot)
-            else:
-                self.lula_kinematics_solver_right.set_robot_base_pose(robot_base_translation, robot_base_orientation)
-                action, success = self.articulation_kinematics_solver_right.compute_inverse_kinematics(target_pos, target_rot)
-            print(success)
+        #for i, arm_id_int in enumerate(arm_id):
+        #    target_pos = np.array([grasp_poses[i][0].cpu(), grasp_poses[i][1].cpu(), grasp_poses[i][2].cpu()])
+        #    target_rot = np.array([grasp_poses[i][3].cpu(), grasp_poses[i][4].cpu(), grasp_poses[i][5].cpu(),grasp_poses[i][6].cpu()])
+        #    if arm_id_int == 1:
+        #        self.lula_kinematics_solver_left.set_robot_base_pose(robot_base_translation, robot_base_orientation)
+        #        action, success = self.articulation_kinematics_solver_left.compute_inverse_kinematics(target_pos, target_rot)
+        #    else:
+        #        self.lula_kinematics_solver_right.set_robot_base_pose(robot_base_translation, robot_base_orientation)
+        #        action, success = self.articulation_kinematics_solver_right.compute_inverse_kinematics(target_pos, target_rot)
+        #    print(success)
            
-            
-        #print("############## LULA ACTION ##############")
-        #print(action)
-        #print(success)
-        #lula_joint_states = action.get_dict()['joint_positions']
-        #TEST START
-        #Compare ee-poses for lula and torch
-
  
-        robot_base_translation, robot_base_orientation = self.robot.get_world_pose()
-        print("Torch kinematics")
-        rob_tf = pk.Transform3d(pos=robot_base_translation, rot=robot_base_orientation,device=self.device)
+        #robot_base_translation, robot_base_orientation = self.robot.get_world_pose()
+        #START: debugg
+        #print("Torch kinematics")
+        #rob_tf = pk.Transform3d(pos=robot_base_translation, rot=robot_base_orientation,device=self.device)
 
-        if exists_l:
-            for i,action in enumerate(action_l):
-                print(action)
-                #ee_left_robot, ee_rot_mat_left = torch_joint_pose(self.left_chain, rob_tf, action.squeeze(), self.device)
-                full_config = assemble_full_configuration(self.robot_chain, (self.left_chain,action.to(device=self.device)), (self.right_chain, self.right_default)).to(device=self.device)
-                yumi_pose = self.robot.get_world_pose()
-                yumi_pos, yumi_rot = yumi_pose[0],yumi_pose[1]
-     
-                wTy = pk.transform3d.Transform3d(pos=torch.tensor(yumi_pos, device=self.device),rot= torch.tensor(yumi_rot, device=self.device),device=self.device)
-
-                _,ee_left_robot = find_ee_poses(full_chain=self.robot_chain, rob_tf=wTy, joint_angles=full_config, device=self.device)
-
-                print(f"left translation in world {i}: ",ee_left_robot)
-        if exists_r:
-            for i,action in enumerate(action_r):
-                print(action)
-                full_config = assemble_full_configuration(self.robot_chain, (self.left_chain,self.left_default), (self.right_chain, action.to(device=self.device))).to(device=self.device)
-                yumi_pose = self.robot.get_world_pose()
-                yumi_pos, yumi_rot = yumi_pose[0],yumi_pose[1]
-                print(action.squeeze().shape)
-                print(self.right_default.shape)
-                wTy = pk.transform3d.Transform3d(pos=torch.tensor(yumi_pos, device=self.device),rot= torch.tensor(yumi_rot, device=self.device),device=self.device)
-             
-                ee_right_robot,_ = find_ee_poses(self.robot_chain, wTy, joint_angles=full_config, device=self.device)
-                print(f"right translation in world {i}: ",ee_right_robot)
-        print("Object poses")
-        for obj in self.objects:
-            print(obj.get_world_poses()[0])
         
+        #if exists_l:
+        #    for i,action in enumerate(action_l):
+        #        print(action)
+        #        #ee_left_robot, ee_rot_mat_left = torch_joint_pose(self.left_chain, rob_tf, action.squeeze(), self.device)
+        #        full_config = assemble_full_configuration(self.robot_chain, (self.left_chain,action.to(device=self.device)), (self.right_chain, self.right_default)).to(device=self.device)
+        #        yumi_pose = self.robot.get_world_pose()
+        #        yumi_pos, yumi_rot = yumi_pose[0],yumi_pose[1]
+     #
+        #        wTy = pk.transform3d.Transform3d(pos=torch.tensor(yumi_pos, device=self.device),rot= torch.tensor(yumi_rot, device=self.device),device=self.device)
+#
+        #        _,ee_left_robot = find_ee_poses(full_chain=self.robot_chain, rob_tf=wTy, joint_angles=full_config, device=self.device)
+#
+        #        print(f"left translation in world {i}: ",ee_left_robot)
+#
+        #if exists_r:
+        #    for i,action in enumerate(action_r):
+        #        print(action)
+        #        full_config = assemble_full_configuration(self.robot_chain, (self.left_chain,self.left_default), (self.right_chain, action.to(device=self.device))).to(device=self.device)
+        #        yumi_pose = self.robot.get_world_pose()
+        #        yumi_pos, yumi_rot = yumi_pose[0],yumi_pose[1]
+        #        print(action.squeeze().shape)
+        #        print(self.right_default.shape)
+        #        wTy = pk.transform3d.Transform3d(pos=torch.tensor(yumi_pos, device=self.device),rot= torch.tensor(yumi_rot, device=self.device),device=self.device)
+        #     
+        #        ee_right_robot,_ = find_ee_poses(self.robot_chain, wTy, joint_angles=full_config, device=self.device)
+        #        print(f"right translation in world {i}: ",ee_right_robot)
+#
+        #print("Object poses")
+        #for obj in self.objects:
+        #    print(obj.get_world_poses()[0])
+        #END: debugg    
     
-        print("Test actions from torch") # Redo later for cleaner action application
+       
         if exists_r:
             for action in action_r:
                 action_nump = action.squeeze().cpu().numpy()
@@ -818,9 +775,11 @@ class Task(Environment):
                 for j in range(self.cfg.render_steps):
                     # time.sleep(0.01)
                     self.world.step(render=True)
+                self.move_both_arms(self.yumi_default_joint_angles)
+                for j in range(self.cfg.render_steps):
+                    # time.sleep(0.01)
+                    self.world.step(render=True)
        
-                
-
         if exists_l:
             for action in action_l:
                 action_nump = action.squeeze().cpu().numpy()
@@ -833,17 +792,16 @@ class Task(Environment):
                 for j in range(self.cfg.render_steps):
                     # time.sleep(0.01)
                     self.world.step(render=True)
+                self.move_both_arms(self.yumi_default_joint_angles)
+                for j in range(self.cfg.render_steps):
+                    # time.sleep(0.01)
+                    self.world.step(render=True)
            
         
-        else:
+        if not exists_l and not exists_r:
             reward += 0
-            pass
+            return reward, goal_status
             # print("IK did not converge to a solution.  No action is being taken")
-        
-        
-        for j in range(self.cfg.render_steps):
-            # time.sleep(0.01)
-            self.world.step(render=True)
         
         # Turns prims invisible for next step
         if picked_objects.ndim>1:
@@ -857,9 +815,12 @@ class Task(Environment):
         
         if np.all(self.picked) == 1:
             goal_status=True
-        print(reward)
+        
         if np.count_nonzero(self.picked) == len(self.objects):
             goal_status = True
+        
+        
+        self.world.step(render=True)
         return reward, goal_status
     
 
@@ -883,13 +844,6 @@ class Task(Environment):
         num_obj = len(self.objects)
         
         
-        #object_poses_raw = [object.get_world_poses() for object in self.objects]
-        #print("Object poses")
-        #print(object_poses_raw) # each entry is [xyz] [qx qy qz qw]
-#
-        #object_poses = [(obj[0][0], obj[1][0]) for obj in object_poses_raw] 
-        #print(object_poses)
-        #object_pose = (object_poses[0][0], object_poses[1][0])
  
         object_pose = []
         # Create tuple of (pos, quat) for each object 
@@ -905,7 +859,7 @@ class Task(Environment):
         wTt = isaac_pose_to_transformation_matrix(table_pose)
         
         tTo = np.matmul(np.linalg.inv(wTt), wTo_arr) #This gives rotations only around z
-        print(tTo.shape)
+       
         # Debug
         
         ex, ey, ez = Rotation.from_quat([table_pose[1][1], table_pose[1][2], table_pose[1][3], table_pose[1][0]]).as_euler('xyz')
@@ -923,12 +877,7 @@ class Task(Environment):
 
         quats = Rotation.from_matrix(wToi[:,:3,:3]).as_quat()
         new_object_pose = np.array([wToi[:,0,3], wToi[:,1,3], wToi[:,2,3], quats[:,0], quats[:,1], quats[:,2], quats[:,3]])
-        #print("New object pose")
-        #print(new_object_pose.shape)
-        #print(new_object_pose)
-        #new_object_pose = pose_to_isaac_pose(new_object_pose)
-        #print("Isaac sim new object pose")
-        #print(new_object_pose)
+
         
         self.table.set_world_poses(positions = np.array([[new_table_pose[0][0], new_table_pose[0][1], new_table_pose[0][2]]]),
                                       orientations = np.array([[new_table_pose[1][0], new_table_pose[1][1], new_table_pose[1][2], new_table_pose[1][3]]]))
@@ -987,17 +936,8 @@ class Task(Environment):
     def select_robot_arm_for_grasping(self, poses, no_obj):
         """Multi object capable"""
        
-        #obj_poses = torch.zeros((len(self.objects), 3), device=self.device, dtype=torch.float32)
-        #for i,obj in enumerate(self.objects):
-        #    pose = obj.get_world_poses()
-        #    trans = pose[0]
-        #    obj_poses[i] = torch.from_numpy(trans)
-        
         obj_poses = poses[:,:3]
         
-        #obj_pose_in_world = (obj_poses[0][0], obj_poses[1][0])
-
-        #robot_pose_in_world = self.robot.get_world_pose()
         robot_pose_in_world = self.robot.get_world_pose()#self.yumi_base_link.get_world_poses()
        
         robot_default_config = assemble_full_configuration(self.robot_chain, (self.right_chain, self.right_default), (self.left_chain, self.left_default))
@@ -1007,10 +947,7 @@ class Task(Environment):
         wTr = pk.transform3d.Transform3d(pos=robot_pose_in_world[0], rot=robot_pose_in_world[1], device=self.device)
 
         wTlee = wTr.compose(yumiTlee.to(self.device))
-        wTree = wTr.compose(yumiTree.to(self.device)) # This coinceds with the lula kinematic solvers ee_pose in world. I.e the root_link is ridgeback. 
-
-        print(wTlee)
-        print(wTree)
+        wTree = wTr.compose(yumiTree.to(self.device)) # This coinceeds with the lula kinematic solvers ee_pose in world. I.e the root_link is ridgeback. 
 
         ee_left_robot = wTlee.get_matrix()[:,:3,3].squeeze() #Only one pose for each arm. No need for batch dimension
         ee_right_robot = wTree.get_matrix()[:,:3,3].squeeze()
@@ -1018,8 +955,8 @@ class Task(Environment):
         ee_left_batch = ee_left_robot.repeat(no_obj,1)
         ee_right_batch = ee_right_robot.repeat(no_obj,1)
         
-        l_dist = torch.linalg.norm(ee_left_batch - torch.tensor(obj_poses,device=self.device), dim=1)
-        r_dist = torch.linalg.norm(ee_right_batch - torch.tensor(obj_poses,device=self.device),dim=1)
+        l_dist = torch.linalg.norm(ee_left_batch - obj_poses, dim=1)
+        r_dist = torch.linalg.norm(ee_right_batch - obj_poses,dim=1)
 
         # One if left, zero if right 
         l_o_r = (l_dist<r_dist).to(torch.uint8).to(self.device)
@@ -1072,100 +1009,55 @@ class Task(Environment):
         if self.cfg.debug:
             quat_rot = Rotation.from_euler('xyz', [0 ,0 ,-90], degrees=True).as_quat()
             quat = [quat_rot[3], quat_rot[0], quat_rot[1], quat_rot[2]]
-            self.robot.set_world_pose(position=np.array([0.0, 1.0, 0.1]) / get_stage_units(), orientation = quat)
+            self.robot.set_world_pose(position=np.array([0.0, 1.0, 0.05]) / get_stage_units(), orientation = quat)
             self.robot_debug_pose = self.robot.get_world_pose()
             print(type(self.robot))
             print("##### Seting up scene ######")
             print(omni.usd.get_prim_descendents(omni.usd.get_prim_at_path("/World/Robot")))
         else:
-            self.robot.set_world_pose(position=np.array([0.0, 1.0, 0.0]) / get_stage_units())
+            self.robot.set_world_pose(position=np.array([0.0, 1.0, 0.05]) / get_stage_units())
         
         #add_update_semantics(omni.usd.get_prim_at_path("/World/Robot"), semantic_label= "robot",type_label= 'class')
+        
         # Torch kinematics Solver
 
-        #Robot descriptor chains
+        # Robot descriptor chains
+
         self.robot_chain = pk.build_chain_from_urdf(open("/home/adamfi/codes/base-pose-sequencing/conf/motion/robot.urdf").read())
         self.robot_chain.to(device=self.device)
-        print(self.robot_chain.print_tree())
         self.right_chain = pk.SerialChain(self.robot_chain, end_frame_name="gripper_r_base", root_frame_name="yumi_body")
         self.right_chain.to(device= self.device)
         self.left_chain = pk.SerialChain(self.robot_chain, end_frame_name="gripper_l_base", root_frame_name="yumi_body")
         self.left_chain.to(device= self.device)
         
-        #print(self.right_chain.get_joint_parent_frame_names(exclude_fixed=False))
 
-        print(self.right_chain.joint_indices)
-
-        print(self.left_chain.print_tree())
-        self.right_chain.to(device=self.device)
-
-    
         # Joint limits. Identical to lula joint limits. Not the issue
+        # Compared so that non fixed incides pair up with the joint names, i.e 1 2 7 3 4 5 6 
         lim_r = torch.tensor(self.right_chain.get_joint_limits(), device=self.device)
         lim_l = torch.tensor(self.left_chain.get_joint_limits(), device=self.device)
 
-        #print(lim_l.T)
-        #print(lim_l.T[:,1])
-        #print(lim_l.T[:,0])
-        #[1.5,-1.5,0.15,0.15,-0.45,0.45,0.3,0.3,0,0,0,0,0,0]
-        
 
         self.right_kinematics_solver = pk.PseudoInverseIK(self.right_chain,
-                                                        #retry_configs=self.right_default, 
-                                                        num_retries=30,
+                                                        retry_configs=self.right_default, 
+                                                        #num_retries=30,
                                                         joint_limits=lim_r.T,
-                                                        max_iterations=60,
+                                                        max_iterations=30,
                                                         early_stopping_any_converged=True,
                                                         #early_stopping_no_improvement="all",
                                                         lr = 0.2
                                                           )
         self.left_kinematics_solver = pk.PseudoInverseIK(self.left_chain, 
-                                                        #retry_configs=self.left_default,
-                                                        num_retries=30,
+                                                        retry_configs=self.left_default,
+                                                        #num_retries=30,
                                                         joint_limits=lim_l.T,
-                                                        max_iterations=60,
+                                                        max_iterations=30,
                                                         early_stopping_any_converged=True,
                                                         #early_stopping_no_improvement="all",
                                                         lr = 0.2
                                                           )
         
 
-        # Lula Kinematics solver
-        self.lula_kinematics_solver_left = LulaKinematicsSolver(
-            robot_description_path = self.cfg.path_prefix + self.cfg.motion.robot_descriptor_file_left,
-            urdf_path = self.cfg.path_prefix + self.cfg.motion.robot_urdf_file
-        )
-        
-        self.lula_kinematics_solver_right = LulaKinematicsSolver(
-            robot_description_path = self.cfg.path_prefix + self.cfg.motion.robot_descriptor_file_right,
-            urdf_path = self.cfg.path_prefix + self.cfg.motion.robot_urdf_file
-        )
-       
-        self.articulation_kinematics_solver_right = ArticulationKinematicsSolver(self.robot, self.lula_kinematics_solver_right, "gripper_r_base")
-        self.articulation_kinematics_solver_left = ArticulationKinematicsSolver(self.robot, self.lula_kinematics_solver_left, "gripper_l_base")
-        
-        # Initialize a LulaCSpaceTrajectoryGenerator object
-        self.task_space_trajectory_generator = LulaTaskSpaceTrajectoryGenerator(
-            robot_description_path = self.cfg.path_prefix + self.cfg.motion.robot_descriptor_file,
-            urdf_path = self.cfg.path_prefix + self.cfg.motion.robot_urdf_file
-        )
-
-        
-
-        # NOTE
-        # VisualCuboid - no collision 
-        # DynamicCuboid - collision
-
-        # Table for objects 
-        # table = VisualCuboid(
-        #     prim_path="/World/table",
-        #     name="table",
-        #     position=np.array([0.0, 0.0, 0.25]),
-        #     scale=np.array([1.6, 0.8, 0.50]),
-        #     size=1.0,
-        #     color=np.array([255, 255, 255]),
-        # )
-        # self.table = XFormPrim("/World/table", name="table")
+     
 
         add_reference_to_stage(usd_path=self.cfg.path_prefix + self.cfg.table_usd_file, prim_path="/World/table")
         # add_reference_to_stage(usd_path=assets_root_path + self.cfg.table_usd_file, prim_path="/World/table")
@@ -1209,7 +1101,7 @@ class Task(Environment):
             obj.set_local_scales(np.array([[0.1, 0.1, 0.1]]))
 
             self.objects.append(obj)
-        print(f"Using {len(self.objects)} number of objects!")
+        print(f"Using {len(self.objects)} objects!")
         self.picked = np.zeros((len(self.objects),1),dtype=np.uint8)
 
         # Yumi base link for computing grasp poses

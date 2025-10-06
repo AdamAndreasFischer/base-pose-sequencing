@@ -12,6 +12,7 @@ import datetime
 import pathlib
 import time
 # from pympler import asizeof
+import matplotlib.pyplot as plt
 
 
 import hydra
@@ -31,39 +32,60 @@ from mushroom_rl.policy import BoltzmannTorchPolicy, Policy
 from mushroom_rl.policy import EpsGreedy
 from mushroom_rl.rl_utils import LinearParameter
 
-from base_pose_sequencing.task.task import Task
+#from base_pose_sequencing.task.task_torch_kinematics import Task
+
+from base_pose_sequencing.task.task_torch_kinematics import Task as PK_Task
 from visual_mm_planning.algorithms.sac_discrete_etn import SAC
 from visual_mm_planning.algorithms.dqn_etn import AbstractDQN
 from visual_mm_planning.networks.optimize_base_pose_etn import ActorNetwork, CriticNetwork, DuelingQNetwork
 
+def plot_rgbd(rgb, depth):
+    # Visualize RGB-D image
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+        
+        # Plot RGB image (remove alpha channel if present)
+        if rgb.shape[-1] == 4:
+            rgb_display = rgb[:, :, :3]  # Remove alpha channel
+        else:
+            rgb_display = rgb
+        ax1.imshow(rgb_display)
+        ax1.set_title('RGB Image')
+        ax1.axis('off')
+        
+        # Plot Depth image
+        im = ax2.imshow(depth, cmap='viridis')
+        ax2.set_title('Depth Image')
+        ax2.axis('off')
+        plt.colorbar(im, ax=ax2, shrink=0.8)
+        
+        plt.tight_layout()
+        plt.show()
 
 
 
 def test(cfg):
     print(cfg.task.train.save_dir)
-    mdp = Task(cfg)
+    mdp = PK_Task(cfg)
     x = 1
     y = 1
     theta = np.pi
     mdp.move_robot(x, y, theta, yumi_joint_angles=None)
     frame_segment = mdp.camera.get_current_frame()["semantic_segmentation"]
     frame = mdp.camera.get_current_frame()
-    print(frame)
-    print(frame_segment)
+   
+    mdp.reset()
     for i in range(50):
-        x = np.random.randint(-2,2)
-        y = np.random.randint(-2,2)
-        mdp.move_robot(x, y, theta, yumi_joint_angles=None)
-        mdp.move_both_arms(mdp.yumi_default_joint_angles)
+        
+      
+        r,s = mdp._get_reward()
         mdp.world.step(render=cfg.render)
-        mdp._get_reward()
-        frame = mdp.camera.get_current_frame()
-        print(frame)
-        mdp.reset()
-        time.sleep(0.5)
-    
-    
-    
+     
+        
+        
+        if i %2 == 0 or s == True:
+            mdp.reset() #Setting render steps to 1 in reset seems to work, camera gets updated image
+           
+        
 
     mdp.shutdown()
 

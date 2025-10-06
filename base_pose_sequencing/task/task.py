@@ -2,29 +2,30 @@
 from isaacsim import SimulationApp
 
 # This enables a livestream server to connect to when running headless
-CONFIG = {
-   # "renderer": "Storm",
-   "width": 1280,
-   "height": 720,
-   "window_width": 1920,
-   "window_height": 1080,
-   "headless": False,
-   "renderer": "RayTracedLighting",
-   # "display_options": 3286,  # Set display options to show default grid,
-}
-
 #CONFIG = {
-#    # "renderer": "Storm",
-#    "width": 320,
-#    "height": 320,
-#    "window_width": 640, 
-#    "window_height": 480,
-#    "headless": True,
-#    "renderer": "RayTracedLighting",
-#    # "display_options": 3286,  # Set display options to show default grid,
+#   # "renderer": "Storm",
+#   "width": 1280,
+#   "height": 720,
+#   "window_width": 1920,
+#   "window_height": 1080,
+#   "headless": False,
+#   "renderer": "RayTracedLighting",
+#   # "display_options": 3286,  # Set display options to show default grid,
 #}
 
+CONFIG = {
+    # "renderer": "Storm",
+    "width": 320,
+    "height": 320,
+    "window_width": 640, 
+    "window_height": 480,
+    "headless": True,
+    "renderer": "RayTracedLighting",
+    # "display_options": 3286,  # Set display options to show default grid,
+}
+print(CONFIG)
 # Start the isaacsim application
+print("########################################################################################################################")
 simulation_app = SimulationApp(launch_config=CONFIG)
 
 
@@ -622,6 +623,8 @@ class Task(Environment):
                 self.lula_kinematics_solver_right.set_robot_base_pose(robot_base_translation, robot_base_orientation)
                 action, success = self.articulation_kinematics_solver_right.compute_inverse_kinematics(target_pos, target_rot)
             print(action)
+            print(dir(action))
+            
             print(success)
             if success:
                 self.robot.apply_action(action)

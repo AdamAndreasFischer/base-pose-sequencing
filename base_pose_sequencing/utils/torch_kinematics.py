@@ -29,11 +29,12 @@ def torch_joint_pose(chain : pk.SerialChain, rob_tf: pk.Transform3d, joint_angle
     return trans, rot_mat
 
 def find_ee_poses(full_chain: pk.Chain, rob_tf: pk.Transform3d, joint_angles: torch.tensor, device:str):
+    """Find ee poses in word frame"""
 
-    frame_indices = full_chain.get_frame_indices("gripper_l_base", "gripper_r_base")
+    frame_indices = full_chain.get_frame_indices("gripper_l_base", "gripper_r_base").to(device=device)
     joint_poses = full_chain.forward_kinematics(joint_angles, frame_indices=frame_indices)
-    rTrightee = joint_poses["gripper_r_base"]
-    rTleftee = joint_poses["gripper_l_base"]
+    rTrightee = joint_poses["gripper_r_base"].to(device=device)
+    rTleftee = joint_poses["gripper_l_base"].to(device=device)
 
     r_ee_in_world = rob_tf.compose(rTrightee).get_matrix()
     l_ee_in_world = rob_tf.compose(rTleftee).get_matrix()
@@ -53,18 +54,7 @@ def compute_dual_arm_end_effector_poses(
     return fk["gripper_l_base"], fk["gripper_r_base"]
 
 
-def _build_arm_chains(device: torch.device | str,urdf_path = str) -> Tuple[pk.Chain, pk.SerialChain, pk.SerialChain]:
-    """Load the dual-arm URDF and extract both the full chain and serial chains for each wrist."""
-    
-    
-    with open(urdf_path, "rb") as f:
-        urdf_data = f.read()
 
-    full_chain = pk.build_chain_from_urdf(urdf_data).to(device=device)
-    right = pk.SerialChain(full_chain, "gripper_r_base", root_frame_name="yumi_body", device=device).to(device=device)
-    left = pk.SerialChain(full_chain, "gripper_l_base", root_frame_name="yumi_body", device=device).to(device=device)
-
-    return full_chain, left, right
 
 def assemble_full_configuration(
     full_chain: pk.Chain,
@@ -104,11 +94,12 @@ def assemble_full_configuration(
 
 def _summarize_results(
     chain: pk.SerialChain, solution: pk.IKSolution, targets: pk.Transform3d, arm_name: str
-) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+,verbose:bool = False) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
     converged_any = solution.converged_any
     success_ids = torch.nonzero(converged_any, as_tuple=False).flatten()
     total = converged_any.numel()
-    print(f"{arm_name} arm: {success_ids.numel()} / {total} target poses converged.")
+    if verbose:
+        print(f"{arm_name} arm: {success_ids.numel()} / {total} target poses converged.")
 
     if success_ids.numel() == 0:
         return success_ids, None
@@ -116,6 +107,7 @@ def _summarize_results(
     best_attempts = []
     best_configs = []
     for idx in success_ids.tolist():
+        # Find first converged jont angle solution
         attempt_ids = torch.nonzero(solution.converged[idx], as_tuple=False)
         best_idx = attempt_ids[0].item()
         best_attempts.append(best_idx)
@@ -128,16 +120,20 @@ def _summarize_results(
     fk_matrix = fk.get_matrix()
 
     pos_err = (target_matrix[:, :3, 3] - fk_matrix[:, :3, 3]).norm(dim=1)
+
+    
     goal_quat = rc.matrix_to_quaternion(target_matrix[:, :3, :3])
     fk_quat = rc.matrix_to_quaternion(fk_matrix[:, :3, :3])
-    rot_err = rc.quaternion_to_axis_angle(rc.quaternion_multiply(goal_quat, rc.quaternion_invert(fk_quat))).norm(dim=1)
 
-    for display_idx, goal_idx in enumerate(success_ids.tolist()):
-        print(
-            f"  Goal {goal_idx}: first converged retry {best_attempts[display_idx]}, "
-            f"pos error {pos_err[display_idx].item():.4f} m, "
-            f"rot error {rot_err[display_idx].item():.4f} rad"
-        )
+    # Measure distance by checking how different q_goal* inv(q_goal) is, as this results in unit quat if eqal
+    rot_err = rc.quaternion_to_axis_angle(rc.quaternion_multiply(goal_quat, rc.quaternion_invert(fk_quat))).norm(dim=1)
+    if verbose:
+        for display_idx, goal_idx in enumerate(success_ids.tolist()):
+            print(
+                f"  Goal {goal_idx}: first converged retry {best_attempts[display_idx]}, "
+                f"pos error {pos_err[display_idx].item():.4f} m, "
+                f"rot error {rot_err[display_idx].item():.4f} rad"
+            )
 
     return success_ids, best_configs_tensor
 
