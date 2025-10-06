@@ -323,7 +323,7 @@ class Task(Environment):
             self.objects[i].set_world_poses(positions = np.array([[x[i]+dx, y[i]+dy, pose[0][2]]]),
                                       orientations = np.array([[base_q[i][3], base_q[i][0], base_q[i][1], base_q[i][2]]]))
         
-        # NOTe: This is very important as actions are only applied after the world is stepped
+        # NOTE: This is very important as actions are only applied after the world is stepped
         for j in range(self.cfg.render_steps):
             self.world.step(render=self.cfg.render)
 
@@ -331,10 +331,33 @@ class Task(Environment):
     def reset_debug(self):
 
         no_obj = len(self.objects)
-        obj_y = np.random.uniform(self.cfg.mdp.table_dimensions.y_min+ self.cfg.task.obj_safety_distance, 
-                                  self.cfg.mdp.table_dimensions.y_max - self.cfg.task.obj_safety_distance, (no_obj,))
-        obj_x = np.random.uniform(self.cfg.mdp.table_dimensions.x_min/2 + self.cfg.task.obj_safety_distance, 
-                                  self.cfg.mdp.table_dimensions.x_max/2 - self.cfg.task.obj_safety_distance, (no_obj,))
+        while True:
+            redo = False
+            obj_y = np.random.uniform(self.cfg.mdp.table_dimensions.y_min+ self.cfg.task.obj_safety_distance, 
+                                    self.cfg.mdp.table_dimensions.y_max - self.cfg.task.obj_safety_distance, (no_obj,))
+            obj_x = np.random.uniform(self.cfg.mdp.table_dimensions.x_min/2 + self.cfg.task.obj_safety_distance, 
+                                    self.cfg.mdp.table_dimensions.x_max/2 - self.cfg.task.obj_safety_distance, (no_obj,))
+            tol = 0.1
+            dist = obj_y+obj_x
+            
+            for i,d in enumerate(dist):
+                max_dist = 0
+                
+                for r in dist[i+1:]:
+                    diff = abs(r-d)
+                    print(diff)
+                    if diff>max_dist:
+                        max_dist=diff
+                    if diff < tol:
+                        redo = True
+                        continue
+                continue
+            if not redo:
+                break
+
+
+            
+
         #obj_y = np.array([self.cfg.mdp.table_dimensions.y_max-0.05]).repeat(no_obj)
         #obj_x = np.array([0])#[self.cfg.mdp.table_dimensions.x_max,0,self.cfg.mdp.table_dimensions.x_min])
         obj_theta = np.random.uniform(-np.pi, np.pi, (no_obj,))
@@ -382,11 +405,36 @@ class Task(Environment):
             self._state, dicts = self.reset_debug()
             return self._state, dicts
 
-        obj_y = np.random.uniform(self.cfg.mdp.table_dimensions.y_min + self.cfg.task.obj_safety_distance, 
-                                  self.cfg.mdp.table_dimensions.y_max - self.cfg.task.obj_safety_distance, (no_obj,))
-        obj_x = np.random.uniform(self.cfg.mdp.table_dimensions.x_min + self.cfg.task.obj_safety_distance, 
-                                  self.cfg.mdp.table_dimensions.x_max - self.cfg.task.obj_safety_distance, (no_obj,))
-        obj_theta = np.random.uniform(-np.pi, np.pi, (no_obj,))
+        while True: # Crude test to make sure that objects are distance enough from each other
+            redo = False
+            obj_y = np.random.uniform(self.cfg.mdp.table_dimensions.y_min+ self.cfg.task.obj_safety_distance, 
+                                    self.cfg.mdp.table_dimensions.y_max - self.cfg.task.obj_safety_distance, (no_obj,))
+            obj_x = np.random.uniform(self.cfg.mdp.table_dimensions.x_min/2 + self.cfg.task.obj_safety_distance, 
+                                    self.cfg.mdp.table_dimensions.x_max/2 - self.cfg.task.obj_safety_distance, (no_obj,))
+            tol = 0.1
+            dist = obj_y+obj_x
+            
+            for i,d in enumerate(dist):
+                max_dist = 0
+                
+                for r in dist[i+1:]:
+                    diff = abs(r-d)
+                    print(diff)
+                    if diff>max_dist:
+                        max_dist=diff
+                    if diff < tol: #Hopefully faster then redoing all over as it is likely this will move the object enough
+                        obj_y[i] = np.random.uniform(self.cfg.mdp.table_dimensions.y_min+ self.cfg.task.obj_safety_distance, 
+                                    self.cfg.mdp.table_dimensions.y_max - self.cfg.task.obj_safety_distance)
+                        obj_x[i] = np.random.uniform(self.cfg.mdp.table_dimensions.x_min+ self.cfg.task.obj_safety_distance, 
+                                    self.cfg.mdp.table_dimensions.x_max - self.cfg.task.obj_safety_distance)
+                    diff = abs(obj_y[i]+obj_x[i]-r)
+                    if diff<tol:
+                        redo = True
+                        continue
+                continue
+            if not redo:
+                break
+
         
         
         self.reset_table_and_object()
