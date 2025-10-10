@@ -31,6 +31,6 @@ class OrthographicCameraCfg(FisheyeCameraCfg):
     projection: str = "orthographic"
 ```
 
-In `isaaclab/sim/spawners/sensors/sensors.py´ copy the Custom fisheye camera attributes and add `"projection":("projection", Sdf.ValueTypeNames.Token)` to it. Add the attributes as an option in spawn_camera.
+In `isaaclab/sim/spawners/sensors/sensors.py` copy the Custom fisheye camera attributes and add ` "projection":("projection", Sdf.ValueTypeNames.Token) ` to it. Add the attributes as an option in spawn_camera.
 
 In `isaaclab/sim/spawners/sensors/camera/camera_cfg.py` import the class and add it to the spawn line. 
