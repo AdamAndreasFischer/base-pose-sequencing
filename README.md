@@ -18,15 +18,19 @@ In `isaaclab/sim/spawners/sensors/sensors_cfg.py`:
 Add a configclass:
 ```
 @configclass
-class OrthographicCameraCfg(FisheyeCameraCfg):
+class OrthographicCameraCfg(PinholeCameraCfg):
+    """Configuration parameters for a USD camera prim with `orthographic camera`_ settings.
+
+    For more information on the parameters, please refer to the
+    `camera documentation <https://docs.omniverse.nvidia.com/materials-and-rendering/latest/cameras.html#fisheye-properties>`__.
+
+    .. note::
+        The default values are taken from the `Replicator camera <https://docs.omniverse.nvidia.com/py/replicator/1.9.8/source/omni.replicator.core/docs/API.html#omni.replicator.core.create.camera>`__
+        function.
+
+    .. _fish-eye camera: https://en.wikipedia.org/wiki/Fisheye_lens
+    """
     func: Callable = sensors.spawn_camera
-    projection_type: Literal[
-        "fisheyePolynomial",
-        "fisheyeSpherical",
-        "fisheyeKannalaBrandtK3",
-        "fisheyeRadTanThinPrism", 
-        "omniDirectionalStereo", 
-        ] = "fisheyePolynomial"
 
     projection: str = "orthographic"
 ```
