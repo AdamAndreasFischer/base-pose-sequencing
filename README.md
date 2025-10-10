@@ -2,7 +2,7 @@
 This is the repo of my master thesis "Base pose sequencing from visual inputs"
 
 
-##
+## Enable orthographic projection in isaac lab
 In order to enable Orthographic camera projections in isaac lab 2.0.0, these modifications needs to be done in the isaac lab source code:
 in `isaaclab/sim/spawners/sensors/__init__.py`:'
 ```
