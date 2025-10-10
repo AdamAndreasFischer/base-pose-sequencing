@@ -1,7 +1,7 @@
 # Isaac imports
 from isaacsim import SimulationApp
 
-visaulize = True
+visaulize = False
 # This enables a livestream server to connect to when running headless
 if visaulize:
     CONFIG = {
@@ -163,6 +163,9 @@ class Task(Environment):
         self.initialize_parameters()
 
         self._set_up_scene()
+
+        print("############# pxr test ######################")
+        print(("cameraProjectionType", Sdf.ValueTypeNames.Token))
 
 
     def seed(self, seed):
