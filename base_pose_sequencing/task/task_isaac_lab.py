@@ -9,6 +9,7 @@ import numpy as np
 import os
 from pxr import UsdGeom, Gf
 import omni.usd
+import random
 
 import pytorch_kinematics as pk
 
@@ -48,12 +49,15 @@ from base_pose_sequencing.task.mdp.terminations import collision_check
 #from base_pose_sequencing.task.mdp.observations import obj_pose_in_robot_frame
 from base_pose_sequencing.task.mdp.actions import MoveBaseActionCfg
 from base_pose_sequencing.task.mdp.rewards import collision
-from base_pose_sequencing.task.mdp.reset import reset_object_state_uniform
+from base_pose_sequencing.task.mdp.reset import reset_object_state_uniform, reset_obstacles
 from base_pose_sequencing.utils.isaac import generate_object_collection
 
 ROOT_PATH = "/home/adamfi/codes/"
-
 NUM_OBJECTS = 5
+TABLE_X_MIN_MAX = (-0.8,0.8)
+TABLE_Y_MIN_MAX= ((-0.4,0.4))
+RANDOMIZE = False
+
 
 def gen_path(num_obj):
     for i in range(num_obj):
@@ -91,6 +95,7 @@ class BasePosePlanningSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.UsdFileCfg(
             usd_path=ROOT_PATH + "ridgeback_yumi/ridgeback_yumi.usd",
             articulation_props=sim_utils.ArticulationRootPropertiesCfg(enabled_self_collisions=True),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity = None,kinematic_enabled=False, rigid_body_enabled=True)
         ),
         init_state=ArticulationCfg.InitialStateCfg(
             joint_pos={
@@ -123,7 +128,7 @@ class BasePosePlanningSceneCfg(InteractiveSceneCfg):
                 "gripper_r_joint_m": 0.015,
             },
             joint_vel={".*": 0.0}, 
-            pos=(0.5, -0.75, 0.0 + 0.25), 
+            pos=(2.0, -2.0, 0.0 + 0.25), 
             rot=(1, 0, 0, 0.)
         ),
         actuators={
@@ -186,13 +191,13 @@ class BasePosePlanningSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.UsdFileCfg(
             usd_path=ROOT_PATH + "base-pose-sequencing/assets/table_wood_test.usd",
             activate_contact_sensors=True,
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(),
-            mass_props=sim_utils.MassPropertiesCfg(mass=100.0),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity = False, kinematic_enabled=False),
+            mass_props=sim_utils.MassPropertiesCfg(mass=1000.0),
             collision_props=sim_utils.CollisionPropertiesCfg(),
             
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
-            pos=(0.5, 0.9, 0.0 + 0.25), rot=(0, 0, 0, 1)),
+            pos=(0.0, 0.0, 0.0 + 0.28), rot=(0, 0, 0, 1)),
     )
 
     #device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -206,40 +211,25 @@ class BasePosePlanningSceneCfg(InteractiveSceneCfg):
     #print("Torch ik initated")
     # Object https://isaac-sim.github.io/IsaacLab/main/source/how-to/multi_asset_spawning.html multi prim
     #https://isaac-sim.github.io/IsaacLab/main/source/api/lab/isaaclab.assets.html#rigid-object-collection Object collection
-    #object = RigidObjectCfg( 
-    #    prim_path="{ENV_REGEX_NS}/object",
-    #    spawn=sim_utils.UsdFileCfg(
-    #        usd_path=ROOT_PATH + "base-pose-sequencing/assets/cube.usd",
-    #        rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=False, rigid_body_enabled=True),
-    #        mass_props=sim_utils.MassPropertiesCfg(mass=0.0),
-    #        collision_props=sim_utils.CollisionPropertiesCfg(),
-    #    ),
-    #    init_state=RigidObjectCfg.InitialStateCfg(
-    #        pos=(0.75, 0.6, 0.525), 
-    #        rot=(0, 0, 0, 1),
-    #    )
-    #)
-    #print("Printing env_regex","{ENV_REGEX_NS}")
-    #gen_path(num_obj=NUM_OBJECTS)
-    #obj_collection = generate_object_collection(NUM_OBJECTS, ROOT_PATH, "{ENV_REGEX_NS}")
-
+ 
     # DONE find a way to make this spawn obstcles based on the number of objects we want
-
+    # In order to change the number of objects, set global variable NUM_OBJECTS to desired amount
     object = RigidObjectCollectionCfg(
         rigid_objects= 
         {f"Object_{i}": RigidObjectCfg(
             prim_path = "{ENV_REGEX_NS}/Object_"+str(i),
             spawn=sim_utils.UsdFileCfg(
                 usd_path=ROOT_PATH + "base-pose-sequencing/assets/cube.usd",
-                rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=False, rigid_body_enabled=True),
-                activate_contact_sensors=True,
-                mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
+                rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity = False,kinematic_enabled=False, rigid_body_enabled=True),
+                mass_props=sim_utils.MassPropertiesCfg(mass=10.0),
                 collision_props=sim_utils.CollisionPropertiesCfg(),
+                semantic_tags = [("object", f"cube_{i}")]
             ),
             init_state = RigidObjectCfg.InitialStateCfg(
-                pos=(0.75, 0.6, 0.525),
+                pos=(random.uniform(TABLE_X_MIN_MAX[0],TABLE_X_MIN_MAX[1]), random.uniform(TABLE_Y_MIN_MAX[0],TABLE_Y_MIN_MAX[1]), 0.6),
                 rot=(0, 0, 0, 1),
-            )) for i in range(NUM_OBJECTS)} #Unreadable ah code. But it works! Weehoo
+            ),
+            ) for i in range(NUM_OBJECTS)}
       
     )
 
@@ -250,22 +240,23 @@ class BasePosePlanningSceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/obstacle",
         spawn = sim_utils.UsdFileCfg(
             usd_path=ROOT_PATH + "base-pose-sequencing/assets/obstacle_contact_sensor.usd",
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=False, rigid_body_enabled=True),
-            mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
-            collision_props=sim_utils.CollisionPropertiesCfg(),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity = False,kinematic_enabled=False, rigid_body_enabled=True),
+            mass_props=sim_utils.MassPropertiesCfg(mass=1000.0),
+            collision_props=sim_utils.CollisionPropertiesCfg(),#collision_enabled=False),
             activate_contact_sensors=True, 
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
-            pos=(1.5,1.5,0.1), 
+            #pos=(1.8,1.8,0.18),
+            pos=(1.5,1.5,0.18),
             rot = (0,0,0,1),
         )
     )
 
     camera = CameraCfg(
         prim_path="{ENV_REGEX_NS}/camera", # Camera as world entity
-        data_types=["rgb", "depth"],
-        height=128,
-        width=128,
+        data_types=["rgb", "depth", "semantic_segmentation"],
+        height=160,
+        width=160,
         spawn=sim_utils.OrthographicCameraCfg(
             focal_length=40.0, 
             focus_distance=5.5, 
@@ -285,13 +276,29 @@ class BasePosePlanningSceneCfg(InteractiveSceneCfg):
 
     # Contact sensors
     # https://docs.isaacsim.omniverse.nvidia.com/4.5.0/sensors/isaacsim_sensors_physics_contact.html
-    #contact_forces_table = ContactSensorCfg(
-    #    prim_path="{ENV_REGEX_NS}/table/_36_wood_block",
-    #    update_period=0.0,
-    #    history_length=1,
-    #    debug_vis=True,
-    #    filter_prim_paths_expr=["{ENV_REGEX_NS}/Robot"],
-    #)
+    contact_forces_table = ContactSensorCfg(
+        prim_path="{ENV_REGEX_NS}/table/_36_wood_block",
+        update_period=0.0,
+        history_length=1,
+        debug_vis=True,
+        filter_prim_paths_expr=["{ENV_REGEX_NS}/obstacle/_61_foam_brick", "{ENV_REGEX_NS}/Robot/base_link"], # Point to the prim which we want to check collision with
+    )
+#"{, 
+    contact_forces_obstacle = ContactSensorCfg(
+        prim_path="{ENV_REGEX_NS}/obstacle/_61_foam_brick",
+        update_period=0.0,
+        history_length=1,
+        debug_vis=True,
+        filter_prim_paths_expr=["{ENV_REGEX_NS}/table/_36_wood_block", "{ENV_REGEX_NS}/Robot/base_link"], #This works. Gives reading in the matrix
+    )
+    contact_forces_robot = ContactSensorCfg(
+        prim_path = "{ENV_REGEX_NS}/Robot/base_link",
+        update_period=0.0, 
+        history_length=1,
+        debug_vis=True,
+        filter_prim_paths_expr=["{ENV_REGEX_NS}/table/_36_wood_block", "{ENV_REGEX_NS}/obstacle/_61_foam_brick"],
+    )
+
 
 @configclass
 class EventCfg:
@@ -304,7 +311,7 @@ class EventCfg:
         params={
             "asset_cfg": SceneEntityCfg("robot"),
             # "pose_range": {'x':(-0.25, 0.25), 'y':(-2.0, -1.5), 'z':(-0., 0.), 'roll':(0., 0.), 'pitch':(0., 0.), 'yaw':(1.4, 1.6)},
-            "pose_range": {'x':(0.4, 0.6), 'y':(-2.0, -1.5), 'z':(-0., 0.), 'roll':(0., 0.), 'pitch':(0., 0.), 'yaw':(1.42, 1.72)},
+            "pose_range": {'x':(-2.5, 2.5), 'y':(-2.5, 2.5), 'z':(-0., 0.), 'roll':(0., 0.), 'pitch':(0., 0.), 'yaw':(1.42, 1.72)},
             "velocity_range": {'x':(-0., .0), 'y':(-0., 0.), 'z':(-0., 0.), 'roll':(0., 0.), 'pitch':(0., 0.), 'yaw':(0, 0)},
         },
     )
@@ -323,15 +330,28 @@ class EventCfg:
         },
     )
     
-    reset_table_pose = EventTerm(
+    # Either random table pose, or not
+    if RANDOMIZE:
+        reset_table_pose = EventTerm(
         func=mdp.reset_root_state_uniform,
         mode="reset",
         params={
             "asset_cfg": SceneEntityCfg("table"),
-            "pose_range": {'x':(-0.01, 0.01), 'y':(-0.01, 0.01), 'z':(-0., 0.), 'roll':(0., 0.), 'pitch':(0., 0.), 'yaw':(0, 0)},
+            "pose_range": {'x':(-2.0, 2.0), 'y':(-2.0, 2.0), 'z':(-0., 0.), 'roll':(0., 0.), 'pitch':(0., 0.), 'yaw':(-torch.pi, torch.pi)},
             "velocity_range": {'x':(-0., .0), 'y':(-0., 0.), 'z':(-0., 0.), 'roll':(0., 0.), 'pitch':(0., 0.), 'yaw':(0, 0)},
         },
     )
+    else:
+        reset_table_pose = EventTerm(
+        func=mdp.reset_root_state_uniform,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("table"),
+            "pose_range": {'x':(-0., 0.), 'y':(-0., 0.), 'z':(-0., 0.), 'roll':(0., 0.), 'pitch':(0., 0.), 'yaw':(-0., 0.)},
+            "velocity_range": {'x':(-0., .0), 'y':(-0., 0.), 'z':(-0., 0.), 'roll':(0., 0.), 'pitch':(0., 0.), 'yaw':(0, 0)},
+        },
+    )
+    
 
     #table = SceneEntityCfg("tabel")
 #
@@ -345,21 +365,21 @@ class EventCfg:
         mode="reset",
         params={
             "asset_cfg": SceneEntityCfg("object"),
-            "pose_range": {'x':(-0.1, .1), 'y':(-0.1, 0.1), 'z':(-0., 0.), 'roll':(0., 0.), 'pitch':(0., 0.), 'yaw':(0, 0)},
+            "table_cfg": SceneEntityCfg("table"),
+            "pose_range": {'x':(TABLE_X_MIN_MAX[0], TABLE_X_MIN_MAX[1]), 'y':(TABLE_Y_MIN_MAX[0], TABLE_Y_MIN_MAX[1]), 'z':(-0., 0.), 'roll':(0., 0.), 'pitch':(0., 0.), 'yaw':(0, 0)},
             "velocity_range": {'x':(-0., .0), 'y':(-0., 0.), 'z':(-0., 0.), 'roll':(0., 0.), 'pitch':(0., 0.), 'yaw':(0, 0)},
         },
     )
 
    
     reset_obstacle_pose = EventTerm(
-        func = mdp.reset_root_state_uniform,
+        func = reset_obstacles,
         mode = "reset",
         params={
             "asset_cfg": SceneEntityCfg("obstacle"),
             "pose_range": {'x':(-2.5, 2.5), 'y':(-2.5, 2.5), 'z':(-0., 0.), 'roll':(0., 0.), 'pitch':(0., 0.), 'yaw':(0, 0)},
             "velocity_range": {'x':(-0., .0), 'y':(-0., 0.), 'z':(-0., 0.), 'roll':(0., 0.), 'pitch':(0., 0.), 'yaw':(0, 0)},
         },
-
     )
 
 @configclass
@@ -383,10 +403,25 @@ class ObservationCfg:
 
     @configclass
     class PolicyCfg(ObsGroup):
-        image = ObsTerm(
+        # Observation space doubles in size when using both RGB and depth
+        rgb = ObsTerm(
             func = mdp.image,
-            params={"sensor_cfg":SceneEntityCfg("camera")},
+            params={"sensor_cfg":SceneEntityCfg("camera"),
+                    "data_type": "rgb"},
         )
+        print("RGB IN OBSERVATION SPACE")
+        print(rgb)
+
+        #depth = ObsTerm(
+        #    func=mdp.image,
+        #    params = {"sensor_cfg":SceneEntityCfg("camera"),
+        #              "data_type": "depth"}
+        #)
+        def __post_init__(self) -> None:
+
+            self.enable_corruption = False
+
+            self.concatenate_terms = True
 
     policy: PolicyCfg=PolicyCfg()
 
@@ -430,15 +465,23 @@ class BasePosePlanningEnvCfg(ManagerBasedRLEnvCfg):
     terminations: TerminationsCfg = TerminationsCfg()
 
     def __post_init__(self) -> None:
-        """Post initialization."""
+        """Post initialization.
+        Decimation: INT 
+        Number of control action updates @ sim dt per policy dt.
+        For instance, if the simulation dt is 0.01s and the policy dt is 0.1s, then the decimation is 10. This means that the control action is updated every 10 simulation steps.
+
+        """
         print("In post")
         # general settings
-        self.decimation = 1
-        self.episode_length_s = 1/6        # sim.dt * decimation (_s: in seconds) One episode with decimation = 1 and ep lenght 1/6 would give 6 steps. 
+        self.decimation = 4 #Timesteps per action, i.e waits N timesteps for next control action
+        self.episode_length_s = 1/2        # sim.dt * decimation (_s: in seconds) How long the episode is in seconds 
+        self.rerender_on_reset = True
+
         # viewer settings
-        self.viewer.eye = (8.0, 0.0, 5.0)
+        self.viewer.eye = (8.0, 0.0, 1.0)
         # simulation settings
-        self.sim.dt = 1 / 120
+        self.sim.physics_dt = 1/120
+        self.sim.dt = 1/20 # Step time of environment. Ex, 1 s ep lenght, 1/10 dt would give 10 steps
         self.sim.render_interval = self.decimation
         print("Pre scene intiation")
         self.scene = BasePosePlanningSceneCfg(num_envs=10, env_spacing=8.0)
