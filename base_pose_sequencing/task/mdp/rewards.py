@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
 def collision(env: "ManagerBasedRLEnv",
-              robot: SceneEntityCfg= SceneEntityCfg("robot")):
+              robot_cfg: SceneEntityCfg= SceneEntityCfg("robot")):
     rev = torch.tensor([1]).to(env.device)
     return rev
 

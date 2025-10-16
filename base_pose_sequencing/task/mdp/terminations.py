@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
 
-def collision_check(env:ManagerBasedRLEnv, robot: SceneEntityCfg = SceneEntityCfg("robot")):
+def collision_check(env:ManagerBasedRLEnv, robot_cfg: SceneEntityCfg = SceneEntityCfg("robot")):
 
-    colision= torch.tensor([0]).to(env.device)
+    colision= torch.tensor([0], dtype=torch.bool).to(env.device)
     return colision

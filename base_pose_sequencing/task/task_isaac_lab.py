@@ -49,14 +49,15 @@ from base_pose_sequencing.task.mdp.terminations import collision_check
 #from base_pose_sequencing.task.mdp.observations import obj_pose_in_robot_frame
 from base_pose_sequencing.task.mdp.actions import MoveBaseActionCfg
 from base_pose_sequencing.task.mdp.rewards import collision
-from base_pose_sequencing.task.mdp.reset import reset_object_state_uniform, reset_obstacles
+from base_pose_sequencing.task.mdp.reset import reset_object_state_uniform, reset_obstacles,reset_robot_state, reset_obstacles_singular, reset_table, zero_velocities
 from base_pose_sequencing.utils.isaac import generate_object_collection
 
 ROOT_PATH = "/home/adamfi/codes/"
 NUM_OBJECTS = 5
+NUM_OBSTACLES= 3
 TABLE_X_MIN_MAX = (-0.8,0.8)
 TABLE_Y_MIN_MAX= ((-0.4,0.4))
-RANDOMIZE = False
+RANDOMIZE = True
 
 
 def gen_path(num_obj):
@@ -105,30 +106,30 @@ class BasePosePlanningSceneCfg(InteractiveSceneCfg):
                 "rear_left_wheel": 0.0,
                 "rear_right_wheel": 0.0,
                 # yumi left arm
-                "yumi_joint_1_l": 1.5,
-                "yumi_joint_2_l": 0.15,
-                "yumi_joint_3_l": -0.45,
-                "yumi_joint_4_l": 0.3,
-                "yumi_joint_5_l": 0.0,
-                "yumi_joint_6_l": 0.0,
-                "yumi_joint_7_l": 0.0,
+                "yumi_joint_1_l": -1.27,
+                "yumi_joint_2_l": -1.84,
+                "yumi_joint_3_l": 0.28,
+                "yumi_joint_4_l": 0.48,
+                "yumi_joint_5_l": 2.08,
+                "yumi_joint_6_l": 1.94,
+                "yumi_joint_7_l": -0.03,
                 # yumi left hand
                 "gripper_l_joint": 0.015,
                 "gripper_l_joint_m": 0.015,
                 # yumi right arm
-                "yumi_joint_1_r": -1.5,
-                "yumi_joint_2_r": 0.15,
-                "yumi_joint_3_r": 0.45,
-                "yumi_joint_4_r": 0.3,
-                "yumi_joint_5_r": 0.0,
-                "yumi_joint_6_r": 0.0,
-                "yumi_joint_7_r": 0.0,
+                "yumi_joint_1_r": 1.262,
+                "yumi_joint_2_r": -1.84,
+                "yumi_joint_3_r": -0.398,
+                "yumi_joint_4_r": 0.362,
+                "yumi_joint_5_r": -2.114,
+                "yumi_joint_6_r": 1.950,
+                "yumi_joint_7_r": 0.129,
                 # yumi right hand
                 "gripper_r_joint": 0.015,
                 "gripper_r_joint_m": 0.015,
             },
             joint_vel={".*": 0.0}, 
-            pos=(2.0, -2.0, 0.0 + 0.25), 
+            pos=(2.0, -2.0, 0.0 + 0.15), 
             rot=(1, 0, 0, 0.)
         ),
         actuators={
@@ -192,7 +193,7 @@ class BasePosePlanningSceneCfg(InteractiveSceneCfg):
             usd_path=ROOT_PATH + "base-pose-sequencing/assets/table_wood_test.usd",
             activate_contact_sensors=True,
             rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity = False, kinematic_enabled=False),
-            mass_props=sim_utils.MassPropertiesCfg(mass=1000.0),
+            mass_props=sim_utils.MassPropertiesCfg(mass=10000.0),
             collision_props=sim_utils.CollisionPropertiesCfg(),
             
         ),
@@ -235,38 +236,57 @@ class BasePosePlanningSceneCfg(InteractiveSceneCfg):
 
     print("Object initiated")
     # Camera
-
     obstacle = RigidObjectCfg(
+
         prim_path="{ENV_REGEX_NS}/obstacle",
         spawn = sim_utils.UsdFileCfg(
             usd_path=ROOT_PATH + "base-pose-sequencing/assets/obstacle_contact_sensor.usd",
             rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity = False,kinematic_enabled=False, rigid_body_enabled=True),
             mass_props=sim_utils.MassPropertiesCfg(mass=1000.0),
-            collision_props=sim_utils.CollisionPropertiesCfg(),#collision_enabled=False),
+            collision_props=sim_utils.CollisionPropertiesCfg(collision_enabled=True),
             activate_contact_sensors=True, 
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
-            #pos=(1.8,1.8,0.18),
-            pos=(1.5,1.5,0.18),
+            pos=(2.0,-2.0,0.18),
+            #pos=(random.uniform(-2.5,2.5),random.uniform(-2.5,2.5),0.18),
             rot = (0,0,0,1),
         )
     )
+    #
+    #obstacle = RigidObjectCollectionCfg(
+    #    rigid_objects= 
+    #    {f"obstacle_{i}":RigidObjectCfg(
+    #    prim_path="{ENV_REGEX_NS}/obstacle_"+str(i),
+    #    spawn = sim_utils.UsdFileCfg(
+    #        usd_path=ROOT_PATH + "base-pose-sequencing/assets/obstacle_contact_sensor.usd",
+    #        rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity = True,kinematic_enabled=False, rigid_body_enabled=True),
+    #        mass_props=sim_utils.MassPropertiesCfg(mass=1000.0),
+    #        collision_props=sim_utils.CollisionPropertiesCfg(collision_enabled=False),
+    #        activate_contact_sensors=True, 
+    #    ),
+    #    init_state=RigidObjectCfg.InitialStateCfg(
+    #        #pos=(1.8,1.8,0.18),
+    #        pos=(random.uniform(-2.5,2.5),random.uniform(-2.5,2.5),0.18),
+    #        rot = (0,0,0,1),
+    #    )) for i in range(NUM_OBSTACLES)}
+    #)
+    print(obstacle)
 
     camera = CameraCfg(
         prim_path="{ENV_REGEX_NS}/camera", # Camera as world entity
-        data_types=["rgb", "depth", "semantic_segmentation"],
-        height=160,
-        width=160,
+        data_types=["rgb", "distance_to_image_plane", "semantic_segmentation"],
+        height=180,
+        width=180,
         spawn=sim_utils.OrthographicCameraCfg(
-            focal_length=40.0, 
-            focus_distance=5.5, 
-            horizontal_aperture=110,
-            vertical_aperture = 110 ,
-            clipping_range=(0.5, 10.0),
+            focal_length=5.0, 
+            focus_distance=3.5, 
+            horizontal_aperture=80,
+            vertical_aperture = 80 ,
+            clipping_range=(0.0, 4.5),
              # Changed in file sensors_cfg.py and sensors.py
         ),
         offset=CameraCfg.OffsetCfg(
-            pos=(0, 0.0, 5.5),          # offset relative to base_link frame
+            pos=(0, 0.0, 4.0),          # offset relative to base_link frame
             # rot=(0.5, -0.5, 0.5, -0.5),   # w x y z: -90, 90, 0   (facing forward)    
             rot=rot_utils.euler_angles_to_quats(np.array([-180, 0, 0]), degrees=True), # Downward facing orthographic camera"
             convention="ros"            # or "world/opengl/ros" if you want local frame offset
@@ -289,7 +309,8 @@ class BasePosePlanningSceneCfg(InteractiveSceneCfg):
         update_period=0.0,
         history_length=1,
         debug_vis=True,
-        filter_prim_paths_expr=["{ENV_REGEX_NS}/table/_36_wood_block", "{ENV_REGEX_NS}/Robot/base_link"], #This works. Gives reading in the matrix
+        filter_prim_paths_expr=["{ENV_REGEX_NS}/Robot/base_link"], #This works. Gives reading in the matrix
+        track_air_time = True
     )
     contact_forces_robot = ContactSensorCfg(
         prim_path = "{ENV_REGEX_NS}/Robot/base_link",
@@ -304,17 +325,16 @@ class BasePosePlanningSceneCfg(InteractiveSceneCfg):
 class EventCfg:
     """Configuration for events."""
 
-
-    reset_robot_pose = EventTerm(
-        func=mdp.reset_root_state_uniform,
-        mode="reset",
+    reset_obstacle_pose = EventTerm(
+        func = reset_obstacles_singular,
+        mode = "reset",
         params={
-            "asset_cfg": SceneEntityCfg("robot"),
-            # "pose_range": {'x':(-0.25, 0.25), 'y':(-2.0, -1.5), 'z':(-0., 0.), 'roll':(0., 0.), 'pitch':(0., 0.), 'yaw':(1.4, 1.6)},
-            "pose_range": {'x':(-2.5, 2.5), 'y':(-2.5, 2.5), 'z':(-0., 0.), 'roll':(0., 0.), 'pitch':(0., 0.), 'yaw':(1.42, 1.72)},
+            "asset_cfg": SceneEntityCfg("obstacle"),
+            "pose_range": {'x':(-2.5, 2.5), 'y':(-2.5, 2.5), 'z':(-0., 0.), 'roll':(0., 0.), 'pitch':(0., 0.), 'yaw':(0, 0)},
             "velocity_range": {'x':(-0., .0), 'y':(-0., 0.), 'z':(-0., 0.), 'roll':(0., 0.), 'pitch':(0., 0.), 'yaw':(0, 0)},
         },
     )
+ 
 
     reset_yumi_joints = EventTerm(
         func=mdp.reset_joints_by_offset,
@@ -333,7 +353,7 @@ class EventCfg:
     # Either random table pose, or not
     if RANDOMIZE:
         reset_table_pose = EventTerm(
-        func=mdp.reset_root_state_uniform,
+        func=reset_table,
         mode="reset",
         params={
             "asset_cfg": SceneEntityCfg("table"),
@@ -343,7 +363,7 @@ class EventCfg:
     )
     else:
         reset_table_pose = EventTerm(
-        func=mdp.reset_root_state_uniform,
+        func=reset_table,
         mode="reset",
         params={
             "asset_cfg": SceneEntityCfg("table"),
@@ -358,7 +378,20 @@ class EventCfg:
     #table_pose = table.data.root_state_w
     #x,y = table_pose[:,0], table_pose[:,1]
     #print("Table pose in reset: ",x," ",y)
-
+    reset_robot_pose = EventTerm(
+        func=reset_robot_state,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("robot"),
+            # "pose_range": {'x':(-0.25, 0.25), 'y':(-2.0, -1.5), 'z':(-0., 0.), 'roll':(0., 0.), 'pitch':(0., 0.), 'yaw':(1.4, 1.6)},
+            "pose_range": {'x':(-2.5, 2.5), 'y':(-2.5, 2.5), 'z':(-0., 0.), 'roll':(0., 0.), 'pitch':(0., 0.), 'yaw':(1.42, 1.72)},
+            "velocity_range": {'x':(-0., .0), 'y':(-0., 0.), 'z':(-0., 0.), 'roll':(0., 0.), 'pitch':(0., 0.), 'yaw':(0, 0)},
+        },
+    )
+    set_zero_vel = EventTerm(
+       func = zero_velocities,
+       mode = "reset",
+    )
 
     reset_obj_pose = EventTerm(
         func=reset_object_state_uniform,
@@ -366,21 +399,16 @@ class EventCfg:
         params={
             "asset_cfg": SceneEntityCfg("object"),
             "table_cfg": SceneEntityCfg("table"),
-            "pose_range": {'x':(TABLE_X_MIN_MAX[0], TABLE_X_MIN_MAX[1]), 'y':(TABLE_Y_MIN_MAX[0], TABLE_Y_MIN_MAX[1]), 'z':(-0., 0.), 'roll':(0., 0.), 'pitch':(0., 0.), 'yaw':(0, 0)},
+            "pose_range": {'x':(TABLE_X_MIN_MAX[0]+0.1, TABLE_X_MIN_MAX[1]-0.1), 'y':(TABLE_Y_MIN_MAX[0]+0.1, TABLE_Y_MIN_MAX[1]-0.1), 'z':(-0., 0.), 'roll':(0., 0.), 'pitch':(0., 0.), 'yaw':(0, 0)},
             "velocity_range": {'x':(-0., .0), 'y':(-0., 0.), 'z':(-0., 0.), 'roll':(0., 0.), 'pitch':(0., 0.), 'yaw':(0, 0)},
         },
     )
 
-   
-    reset_obstacle_pose = EventTerm(
-        func = reset_obstacles,
-        mode = "reset",
-        params={
-            "asset_cfg": SceneEntityCfg("obstacle"),
-            "pose_range": {'x':(-2.5, 2.5), 'y':(-2.5, 2.5), 'z':(-0., 0.), 'roll':(0., 0.), 'pitch':(0., 0.), 'yaw':(0, 0)},
-            "velocity_range": {'x':(-0., .0), 'y':(-0., 0.), 'z':(-0., 0.), 'roll':(0., 0.), 'pitch':(0., 0.), 'yaw':(0, 0)},
-        },
-    )
+    
+    
+
+    
+
 
 @configclass
 class ActionsCfg:
@@ -407,21 +435,22 @@ class ObservationCfg:
         rgb = ObsTerm(
             func = mdp.image,
             params={"sensor_cfg":SceneEntityCfg("camera"),
-                    "data_type": "rgb"},
+                    #"data_type": "rgb"},
+            }
         )
         print("RGB IN OBSERVATION SPACE")
         print(rgb)
 
-        #depth = ObsTerm(
-        #    func=mdp.image,
-        #    params = {"sensor_cfg":SceneEntityCfg("camera"),
-        #              "data_type": "depth"}
-        #)
+        depth = ObsTerm(
+            func=mdp.image,
+            params = {"sensor_cfg":SceneEntityCfg("camera"),
+                      "data_type": "distance_to_image_plane"}
+        )
         def __post_init__(self) -> None:
 
             self.enable_corruption = False
 
-            self.concatenate_terms = True
+            self.concatenate_terms = False
 
     policy: PolicyCfg=PolicyCfg()
 
@@ -474,13 +503,13 @@ class BasePosePlanningEnvCfg(ManagerBasedRLEnvCfg):
         print("In post")
         # general settings
         self.decimation = 4 #Timesteps per action, i.e waits N timesteps for next control action
-        self.episode_length_s = 1/2        # sim.dt * decimation (_s: in seconds) How long the episode is in seconds 
+        self.episode_length_s = 2        # sim.dt * decimation (_s: in seconds) How long the episode is in seconds 
         self.rerender_on_reset = True
 
         # viewer settings
-        self.viewer.eye = (8.0, 0.0, 1.0)
+        self.viewer.eye = (0.0, 0.0, 40.0)
         # simulation settings
-        self.sim.physics_dt = 1/120
+        self.sim.physics_dt = 1/60
         self.sim.dt = 1/20 # Step time of environment. Ex, 1 s ep lenght, 1/10 dt would give 10 steps
         self.sim.render_interval = self.decimation
         print("Pre scene intiation")

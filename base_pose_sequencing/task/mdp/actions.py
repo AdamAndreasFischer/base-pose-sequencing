@@ -83,10 +83,12 @@ class MoveBaseAction(ActionTerm):
 
         self._processed_actions = torch.stack([x, y, theta], dim=-1)
 
+        
+
 
     def apply_actions(self):
         root_state = self._asset.data.root_state_w
-        
+       
         pos_x = self._processed_actions[:, 0]
         pos_y = self._processed_actions[:, 1]
         theta = self._processed_actions[:, 2]
@@ -110,7 +112,7 @@ class MoveBaseAction(ActionTerm):
         pos = torch.stack((world_x, world_y), dim=1)
 
         root_state[:, :2] = pos[:,:2].to(0)
-        root_state[:, 3:7] = torch.tensor(rot_quat)
+        root_state[:, 3:7] = rot_quat
 
         self._asset.write_root_pose_to_sim(root_state[:, :7])
 
