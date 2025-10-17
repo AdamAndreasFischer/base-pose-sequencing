@@ -502,7 +502,7 @@ class BasePosePlanningEnvCfg(ManagerBasedRLEnvCfg):
         """
         print("In post")
         # general settings
-        self.decimation = 4 #Timesteps per action, i.e waits N timesteps for next control action
+        self.decimation = 1 #Timesteps per action, i.e waits N timesteps for next control action
         self.episode_length_s = 2        # sim.dt * decimation (_s: in seconds) How long the episode is in seconds 
         self.rerender_on_reset = True
 

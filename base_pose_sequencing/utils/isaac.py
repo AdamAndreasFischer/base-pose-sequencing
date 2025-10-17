@@ -18,7 +18,38 @@ from tqdm import tqdm
 from scipy.spatial.transform import Rotation
 from typing import Union
 from pxr import Sdf, Usd, UsdGeom
+from isaacsim.core.utils.stage import get_current_stage
 
+from pxr import Gf, Sdf
+
+
+import isaaclab.sim as sim_utils
+
+from isaaclab.assets import (
+
+    Articulation,
+
+    ArticulationCfg,
+
+    AssetBaseCfg,
+
+    RigidObject,
+
+    RigidObjectCfg,
+
+    RigidObjectCollection,
+
+    RigidObjectCollectionCfg,
+
+)
+
+from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
+
+from isaaclab.sim import SimulationContext
+
+from isaaclab.utils import Timer, configclass
+
+from isaaclab.utils.assets import ISAACLAB_NUCLEUS_DIR
 
 def get_visibility_attribute(
     stage: Usd.Stage, prim_path: str
@@ -91,3 +122,25 @@ def get_transformation_matrix(pose_s, pose_d):
     sTw = np.linalg.inv(wTs)
     sTd = np.matmul(sTw, wTd)
     return sTd
+
+
+def generate_object_collection(num_obj, root_path,path):
+    ridgid_objects= {}
+
+    for i in range(num_obj):
+
+        name = "object_"+str(i)
+        obj = RigidObjectCfg(
+            prim_path = f"{path}/Object_{i}",
+            spawn=sim_utils.UsdFileCfg(
+                usd_path=root_path + "base-pose-sequencing/assets/cube.usd",
+                rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=False, rigid_body_enabled=True),
+                mass_props=sim_utils.MassPropertiesCfg(mass=0.0),
+                collision_props=sim_utils.CollisionPropertiesCfg(),
+            ),
+            init_state = RigidObjectCfg.InitialStateCfg(
+                pos=(0.75, 0.6-i/10, 0.525), #TEST remove -i later
+                rot=(0, 0, 0, 1),
+            ))
+        ridgid_objects[name] = obj
+    return ridgid_objects
