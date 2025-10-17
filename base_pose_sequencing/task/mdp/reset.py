@@ -45,9 +45,8 @@ def reset_object_state_uniform(
    
     # get default root state
     table: RigidObject = env.scene[table_cfg.name]
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        table_poses = table.data.body_state_w
+   
+    table_poses = table.data.body_state_w
   
     obj_root_states = asset.data.default_object_state[env_ids].clone() # Initial states for the objects
     n_obj = obj_root_states.shape[1]
@@ -84,8 +83,10 @@ def reset_object_state_uniform(
     # set into the physics simulation
     asset.write_object_pose_to_sim(torch.cat([positions, orientations], dim=-1), env_ids=env_ids)
     asset.write_object_velocity_to_sim(velocities, env_ids=env_ids)
-    for i in range(10):
-        env.sim.step(render=True)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        for i in range(10):
+            env.sim.step(render=True)
 
    
 
@@ -163,10 +164,10 @@ def reset_robot_state(env: ManagerBasedRLEnv,
         velocity_range: dict[str, tuple[float, float]],
         asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")):
     
-
+    
     asset: RigidObject | Articulation = env.scene[asset_cfg.name]
-    
-    
+
+
     not_suitable_pose = True
     while not_suitable_pose:
         origins = env.scene.env_origins[env_ids] # Robot randomization should use origin as center, not robot start pose
@@ -194,20 +195,20 @@ def reset_robot_state(env: ManagerBasedRLEnv,
         #    env.sim.step(render=True)
 
         env.scene["contact_forces_robot"].reset(env_ids)
-        for _ in range(2):
+        for _ in range(2): #This stepping is crucial as it updates the physics of the simulation
             env.sim.step(render=True)
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             forces_world = env.scene["contact_forces_robot"].data.force_matrix_w 
         forces_env = forces_world[env_ids].squeeze(1) # Squeeze to remove dimenison that show ammount of bodies in sensor (?. I think it corresponds to how many meshes are connected to it?
-      
+        
         force_detection = (forces_env==0.).all(dim=(1,2)).to(dtype=torch.uint8)
 
         if torch.any(force_detection!=1):
-       
+        
             env_ids = env_ids[(1-force_detection)]
-          
+            
             
         else:
             not_suitable_pose = False
@@ -218,46 +219,44 @@ def reset_obstacles_singular(env: ManagerBasedRLEnv,
         pose_range: dict[str, tuple[float, float]],
         velocity_range: dict[str, tuple[float, float]],
         asset_cfg: SceneEntityCfg = SceneEntityCfg("obstacle")):
-   
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        asset: RigidObject | Articulation | RigidObjectCollection = env.scene[asset_cfg.name]
+
+    asset: RigidObject | Articulation | RigidObjectCollection = env.scene[asset_cfg.name]
 
 
-        #root_states = asset.data.default_root_state[env_ids].clone()
-        root_states = asset.data.default_root_state[env_ids].clone()
+    #root_states = asset.data.default_root_state[env_ids].clone()
+    root_states = asset.data.default_root_state[env_ids].clone()
 
-        # poses
-        range_list = [pose_range.get(key, (0.0, 0.0)) for key in ["x", "y", "z", "roll", "pitch", "yaw"]]
-        ranges = torch.tensor(range_list, device=asset.device)
+    # poses
+    range_list = [pose_range.get(key, (0.0, 0.0)) for key in ["x", "y", "z", "roll", "pitch", "yaw"]]
+    ranges = torch.tensor(range_list, device=asset.device)
+    
+    not_suitable_pose = True
+    #i = 0
+    
         
-        not_suitable_pose = True
-        #i = 0
-        
-            
-        rand_samples = math_utils.sample_uniform(ranges[:, 0], ranges[:, 1], (len(env_ids), 6), device=asset.device)
-        #root_states[:, 0:3] + 
+    rand_samples = math_utils.sample_uniform(ranges[:, 0], ranges[:, 1], (len(env_ids), 6), device=asset.device)
+    #root_states[:, 0:3] + 
 
-        z_offset = torch.tensor([[0,0,0.18]]).repeat(len(env_ids),1).to(env.device)
+    z_offset = torch.tensor([[0,0,0.18]]).repeat(len(env_ids),1).to(env.device)
 
-        origins = env.scene.env_origins[env_ids]
-        # Debug to test contact sensor without collision
-        #if i <=1:
-        #    rand_samples = torch.tensor([[2,-2,0,0,0,0]]).repeat(len(env_ids),1).to(env.device)
+    origins = env.scene.env_origins[env_ids]
+    # Debug to test contact sensor without collision
+    #if i <=1:
+    #    rand_samples = torch.tensor([[2,-2,0,0,0,0]]).repeat(len(env_ids),1).to(env.device)
 
-        positions =  origins + rand_samples[ :, 0:3]+ z_offset
-        orientations_delta = math_utils.quat_from_euler_xyz(rand_samples[:, 3], rand_samples[:, 4], rand_samples[:, 5])
-        orientations = math_utils.quat_mul(root_states[:, 3:7], orientations_delta)
-        # velocities
-        vel_range_list = [velocity_range.get(key, (0.0, 0.0)) for key in ["x", "y", "z", "roll", "pitch", "yaw"]]
-        vel_ranges = torch.tensor(vel_range_list, device=asset.device)
-        rand_samples = math_utils.sample_uniform(vel_ranges[:, 0], vel_ranges[:, 1], (len(env_ids), 6), device=asset.device)
+    positions =  origins + rand_samples[ :, 0:3]+ z_offset
+    orientations_delta = math_utils.quat_from_euler_xyz(rand_samples[:, 3], rand_samples[:, 4], rand_samples[:, 5])
+    orientations = math_utils.quat_mul(root_states[:, 3:7], orientations_delta)
+    # velocities
+    vel_range_list = [velocity_range.get(key, (0.0, 0.0)) for key in ["x", "y", "z", "roll", "pitch", "yaw"]]
+    vel_ranges = torch.tensor(vel_range_list, device=asset.device)
+    rand_samples = math_utils.sample_uniform(vel_ranges[:, 0], vel_ranges[:, 1], (len(env_ids), 6), device=asset.device)
 
-        velocities = root_states[ :, 7:13] + rand_samples
-        #print("Pre set pose")
-        # set into the physics simulation
-        asset.write_root_pose_to_sim(torch.cat([positions, orientations], dim=-1), env_ids=env_ids)
-        asset.write_root_velocity_to_sim(velocities, env_ids=env_ids)
+    velocities = root_states[ :, 7:13] + rand_samples
+    #print("Pre set pose")
+    # set into the physics simulation
+    asset.write_root_pose_to_sim(torch.cat([positions, orientations], dim=-1), env_ids=env_ids)
+    asset.write_root_velocity_to_sim(velocities, env_ids=env_ids)
 
         
         #for _ in range(1):
@@ -290,67 +289,65 @@ def reset_table(
         pose_range: dict[str, tuple[float, float]],
         velocity_range: dict[str, tuple[float, float]],
         asset_cfg: SceneEntityCfg = SceneEntityCfg("table")):
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        asset: RigidObject | Articulation | RigidObjectCollection = env.scene[asset_cfg.name]
+   
+    asset: RigidObject | Articulation | RigidObjectCollection = env.scene[asset_cfg.name]
 
-        #root_states = asset.data.default_root_state[env_ids].clone()
-        
-
-        # poses
-        range_list = [pose_range.get(key, (0.0, 0.0)) for key in ["x", "y", "z", "roll", "pitch", "yaw"]]
-        ranges = torch.tensor(range_list, device=asset.device)
-        
-        not_suitable_pose = True
-        #i = 0
-        while not_suitable_pose:
-            root_states = asset.data.default_root_state[env_ids].clone()
-            rand_samples = math_utils.sample_uniform(ranges[:, 0], ranges[:, 1], (len(env_ids), 6), device=asset.device)
-            #root_states[:, 0:3] + 
-
-            z_offset = torch.tensor([[0,0,0.28]]).repeat(len(env_ids),1).to(env.device)
-
-            origins = env.scene.env_origins[env_ids]
-        
-            positions =  origins + rand_samples[ :, 0:3]+ z_offset
-            orientations_delta = math_utils.quat_from_euler_xyz(rand_samples[:, 3], rand_samples[:, 4], rand_samples[:, 5])
-            orientations = math_utils.quat_mul(root_states[:, 3:7], orientations_delta)
-
-            # velocities
-            vel_range_list = [velocity_range.get(key, (0.0, 0.0)) for key in ["x", "y", "z", "roll", "pitch", "yaw"]]
-            vel_ranges = torch.tensor(vel_range_list, device=asset.device)
-
-            rand_samples = math_utils.sample_uniform(vel_ranges[:, 0], vel_ranges[:, 1], (len(env_ids), 6), device=asset.device)
-
-            velocities = root_states[ :, 7:13] + rand_samples
-            #print("Pre set pose")
-            # set into the physics simulation
-            asset.write_root_pose_to_sim(torch.cat([positions, orientations], dim=-1), env_ids=env_ids)
-            asset.write_root_velocity_to_sim(velocities, env_ids=env_ids)
-            
-            #Same test here as in robot reset
-            #for _ in range(2):
-            #    env.sim.step(render=True)
-              
-        
-            env.scene["contact_forces_table"].reset([env_ids]) #Resetting the sensor seems to update it as intended! Debug results, two iterations with contact shows force before and after reset, 
-            
-            for _ in range(2):
-                env.sim.step(render=True)
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                forces_world = env.scene["contact_forces_table"].data.force_matrix_w 
-            forces_env = forces_world[env_ids].squeeze(1) # Squeeze to remove dimenison that show ammount of bodies in sensor (?. I think it corresponds to how many meshes are connected to it?
-      
-            force_detection = (forces_env==0.).all(dim=(1,2)).to(dtype=torch.uint8)
-        
+    #root_states = asset.data.default_root_state[env_ids].clone()
     
-            if torch.any(force_detection!=1):
-          
-                env_ids = env_ids[(1-force_detection)]
-                
-            else:
-                not_suitable_pose = False
+
+    # poses
+    range_list = [pose_range.get(key, (0.0, 0.0)) for key in ["x", "y", "z", "roll", "pitch", "yaw"]]
+    ranges = torch.tensor(range_list, device=asset.device)
+    
+    not_suitable_pose = True
+    #i = 0
+    while not_suitable_pose:
+        root_states = asset.data.default_root_state[env_ids].clone()
+        rand_samples = math_utils.sample_uniform(ranges[:, 0], ranges[:, 1], (len(env_ids), 6), device=asset.device)
+        #root_states[:, 0:3] + 
+
+        z_offset = torch.tensor([[0,0,0.28]]).repeat(len(env_ids),1).to(env.device)
+
+        origins = env.scene.env_origins[env_ids]
+    
+        positions =  origins + rand_samples[ :, 0:3]+ z_offset
+        orientations_delta = math_utils.quat_from_euler_xyz(rand_samples[:, 3], rand_samples[:, 4], rand_samples[:, 5])
+        orientations = math_utils.quat_mul(root_states[:, 3:7], orientations_delta)
+
+        # velocities
+        vel_range_list = [velocity_range.get(key, (0.0, 0.0)) for key in ["x", "y", "z", "roll", "pitch", "yaw"]]
+        vel_ranges = torch.tensor(vel_range_list, device=asset.device)
+
+        rand_samples = math_utils.sample_uniform(vel_ranges[:, 0], vel_ranges[:, 1], (len(env_ids), 6), device=asset.device)
+
+        velocities = root_states[ :, 7:13] + rand_samples
+        #print("Pre set pose")
+        # set into the physics simulation
+        asset.write_root_pose_to_sim(torch.cat([positions, orientations], dim=-1), env_ids=env_ids)
+        asset.write_root_velocity_to_sim(velocities, env_ids=env_ids)
+        
+        #Same test here as in robot reset
+        #for _ in range(2):
+        #    env.sim.step(render=True)
+            
+    
+        env.scene["contact_forces_table"].reset([env_ids]) #Resetting the sensor seems to update it as intended! Debug results, two iterations with contact shows force before and after reset, 
+        
+        for _ in range(2):
+            env.sim.step(render=True)
+        
+        forces_world = env.scene["contact_forces_table"].data.force_matrix_w 
+        forces_env = forces_world[env_ids].squeeze(1) # Squeeze to remove dimenison that show ammount of bodies in sensor (?. I think it corresponds to how many meshes are connected to it?
+    
+        force_detection = (forces_env==0.).all(dim=(1,2)).to(dtype=torch.uint8)
+    
+
+        if torch.any(force_detection!=1):
+        
+            env_ids = env_ids[(1-force_detection)]
+            
+        else:
+            not_suitable_pose = False
                
 
 

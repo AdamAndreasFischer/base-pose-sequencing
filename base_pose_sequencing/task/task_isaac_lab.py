@@ -80,9 +80,9 @@ class BasePosePlanningSceneCfg(InteractiveSceneCfg):
     # ground plane
     ground = AssetBaseCfg(
         prim_path="/World/ground",
-        spawn=sim_utils.GroundPlaneCfg(size=(100.0, 100.0), color=(10/255.0, 10/255.0, 10/255.0)),
+        spawn=sim_utils.GroundPlaneCfg(size=(100.0, 100.0), usd_path = "/home/adamfi/codes/base-pose-sequencing/assets/ground_custom.usd")# color=(25/255.0, 25/255.0, 25/255.0))#, usd_path= ROOT_PATH+"base-pose-sequencing/assets/Ground_plane.usd"),
     )
-
+    
     # lights - can be disabled as IsaacLab also supports global illumination
     dome_light = AssetBaseCfg(
         prim_path="/World/DomeLight",
@@ -275,18 +275,18 @@ class BasePosePlanningSceneCfg(InteractiveSceneCfg):
     camera = CameraCfg(
         prim_path="{ENV_REGEX_NS}/camera", # Camera as world entity
         data_types=["rgb", "distance_to_image_plane", "semantic_segmentation"],
-        height=180,
-        width=180,
+        height=160,
+        width=160,
         spawn=sim_utils.OrthographicCameraCfg(
-            focal_length=5.0, 
-            focus_distance=3.5, 
-            horizontal_aperture=80,
-            vertical_aperture = 80 ,
+            focal_length=7.0, 
+            focus_distance=2.4, 
+            horizontal_aperture=65,
+            vertical_aperture = 65 ,
             clipping_range=(0.0, 4.5),
              # Changed in file sensors_cfg.py and sensors.py
         ),
         offset=CameraCfg.OffsetCfg(
-            pos=(0, 0.0, 4.0),          # offset relative to base_link frame
+            pos=(0, 0.0, 2.8),          # offset relative to base_link frame
             # rot=(0.5, -0.5, 0.5, -0.5),   # w x y z: -90, 90, 0   (facing forward)    
             rot=rot_utils.euler_angles_to_quats(np.array([-180, 0, 0]), degrees=True), # Downward facing orthographic camera"
             convention="ros"            # or "world/opengl/ros" if you want local frame offset
@@ -300,7 +300,7 @@ class BasePosePlanningSceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/table/_36_wood_block",
         update_period=0.0,
         history_length=1,
-        debug_vis=True,
+        debug_vis=False,
         filter_prim_paths_expr=["{ENV_REGEX_NS}/obstacle/_61_foam_brick", "{ENV_REGEX_NS}/Robot/base_link"], # Point to the prim which we want to check collision with
     )
 #"{, 
@@ -308,7 +308,7 @@ class BasePosePlanningSceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/obstacle/_61_foam_brick",
         update_period=0.0,
         history_length=1,
-        debug_vis=True,
+        debug_vis=False,
         filter_prim_paths_expr=["{ENV_REGEX_NS}/Robot/base_link"], #This works. Gives reading in the matrix
         track_air_time = True
     )
@@ -316,7 +316,7 @@ class BasePosePlanningSceneCfg(InteractiveSceneCfg):
         prim_path = "{ENV_REGEX_NS}/Robot/base_link",
         update_period=0.0, 
         history_length=1,
-        debug_vis=True,
+        debug_vis=False,
         filter_prim_paths_expr=["{ENV_REGEX_NS}/table/_36_wood_block", "{ENV_REGEX_NS}/obstacle/_61_foam_brick"],
     )
 
@@ -513,6 +513,6 @@ class BasePosePlanningEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.dt = 1/20 # Step time of environment. Ex, 1 s ep lenght, 1/10 dt would give 10 steps
         self.sim.render_interval = self.decimation
         print("Pre scene intiation")
-        self.scene = BasePosePlanningSceneCfg(num_envs=10, env_spacing=8.0)
+        self.scene = BasePosePlanningSceneCfg(num_envs=10, env_spacing=10.0)
         print("Scene intiated")
         
