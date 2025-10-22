@@ -35,6 +35,43 @@ class OrthographicCameraCfg(PinholeCameraCfg):
     projection: str = "orthographic"
 ```
 
-In `isaaclab/sim/spawners/sensors/sensors.py` copy the Custom fisheye camera attributes and add ` "projection":("projection", Sdf.ValueTypeNames.Token) ` to it. Add the attributes as an option in spawn_camera.
+In `isaaclab/sim/spawners/sensors/sensors.py` add
+
+```
+CUSTOM_ORTHOGRAPHIC_CAMERA_ATTRIBUTES = {
+    "projection_type": ("cameraProjectionType", Sdf.ValueTypeNames.Token),
+    "fisheye_nominal_width": ("fthetaWidth", Sdf.ValueTypeNames.Float),
+    "fisheye_nominal_height": ("fthetaHeight", Sdf.ValueTypeNames.Float),
+    "fisheye_optical_centre_x": ("fthetaCx", Sdf.ValueTypeNames.Float),
+    "fisheye_optical_centre_y": ("fthetaCy", Sdf.ValueTypeNames.Float),
+    "fisheye_max_fov": ("fthetaMaxFov", Sdf.ValueTypeNames.Float),
+    "fisheye_polynomial_a": ("fthetaPolyA", Sdf.ValueTypeNames.Float),
+    "fisheye_polynomial_b": ("fthetaPolyB", Sdf.ValueTypeNames.Float),
+    "fisheye_polynomial_c": ("fthetaPolyC", Sdf.ValueTypeNames.Float),
+    "fisheye_polynomial_d": ("fthetaPolyD", Sdf.ValueTypeNames.Float),
+    "fisheye_polynomial_e": ("fthetaPolyE", Sdf.ValueTypeNames.Float),
+    "fisheye_polynomial_f": ("fthetaPolyF", Sdf.ValueTypeNames.Float),
+    "projection": ("projection", Sdf.ValueTypeNames.Token)
+}
+
+In arguments to spawn_camera make following changes
+cfg: sensors_cfg.PinholeCameraCfg | sensors_cfg.FisheyeCameraCfg,
+to
+cfg: sensors_cfg.PinholeCameraCfg | sensors_cfg.FisheyeCameraCfg| sensors_cfg.OrthographicCameraCfg,
+
+In function change
+if cfg.projection_type == "pinhole":
+        attribute_types = CUSTOM_PINHOLE_CAMERA_ATTRIBUTES
+else:
+    attribute_types = CUSTOM_FISHEYE_CAMERA_ATTRIBUTES
+to
+if cfg.projection_type == "pinhole":
+    attribute_types = CUSTOM_PINHOLE_CAMERA_ATTRIBUTES
+elif cfg.projection == "orthographic":
+    attribute_types = CUSTOM_ORTHOGRAPHIC_CAMERA_ATTRIBUTES
+else:
+    attribute_types = CUSTOM_FISHEYE_CAMERA_ATTRIBUTES
+```
+
 
 In `isaaclab/sim/spawners/sensors/camera/camera_cfg.py` import the class and add it to the spawn line in the class CameraCfg. 
