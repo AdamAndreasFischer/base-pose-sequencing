@@ -5,7 +5,7 @@ This is the repo of my master thesis "Base pose sequencing from visual inputs"
 ## Enable orthographic projection in isaac lab
 In order to enable Orthographic camera projections in isaac lab 2.0.0, these modifications needs to be done in the isaac lab source code:
 
-in `isaaclab/sim/spawners/sensors/__init__.py`:'
+in `isaaclab/isaaclab/sim/spawners/sensors/__init__.py`:'
 ```
 Replace
 from .sensors_cfg import FisheyeCameraCfg, PinholeCameraCfg
@@ -13,7 +13,7 @@ With
 from .sensors_cfg import FisheyeCameraCfg, PinholeCameraCfg, OrthographicCameraCfg
 ```
 
-In `isaaclab/sim/spawners/sensors/sensors_cfg.py`:
+In `isaaclab/isaaclab/sim/spawners/sensors/sensors_cfg.py`:
 
 Add a configclass:
 ```
@@ -35,7 +35,7 @@ class OrthographicCameraCfg(PinholeCameraCfg):
     projection: str = "orthographic"
 ```
 
-In `isaaclab/sim/spawners/sensors/sensors.py` add
+In `isaaclab/isaaclab/sim/spawners/sensors/sensors.py` add
 
 ```
 CUSTOM_ORTHOGRAPHIC_CAMERA_ATTRIBUTES = {
@@ -76,4 +76,4 @@ else:
 ```
 
 
-In `isaaclab/sim/spawners/sensors/camera/camera_cfg.py` import the class and add it to the spawn line in the class CameraCfg. 
+In `isaaclab/isaaclab/sensors/camera/camera_cfg.py` import the class and add it to the spawn line in the class CameraCfg. 
