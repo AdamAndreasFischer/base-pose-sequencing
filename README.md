@@ -53,18 +53,20 @@ CUSTOM_ORTHOGRAPHIC_CAMERA_ATTRIBUTES = {
     "fisheye_polynomial_f": ("fthetaPolyF", Sdf.ValueTypeNames.Float),
     "projection": ("projection", Sdf.ValueTypeNames.Token)
 }
-
+```
 In arguments to spawn_camera make following changes
+```
 cfg: sensors_cfg.PinholeCameraCfg | sensors_cfg.FisheyeCameraCfg,
-to
+***to***
 cfg: sensors_cfg.PinholeCameraCfg | sensors_cfg.FisheyeCameraCfg| sensors_cfg.OrthographicCameraCfg,
-
+```
 In function change
+```
 if cfg.projection_type == "pinhole":
         attribute_types = CUSTOM_PINHOLE_CAMERA_ATTRIBUTES
 else:
     attribute_types = CUSTOM_FISHEYE_CAMERA_ATTRIBUTES
-to
+***to***
 if cfg.projection_type == "pinhole":
     attribute_types = CUSTOM_PINHOLE_CAMERA_ATTRIBUTES
 elif cfg.projection == "orthographic":
