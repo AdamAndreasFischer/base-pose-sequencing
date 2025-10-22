@@ -4,6 +4,7 @@ from scipy.spatial.transform import Rotation
 import torch
 from typing import Dict, Optional, Tuple
 from pytorch_kinematics.transforms import rotation_conversions as rc
+from functools import lru_cache
 
 def torch_joint_pose(chain : pk.SerialChain, rob_tf: pk.Transform3d, joint_angles: torch.tensor, device: str):
     """
@@ -95,6 +96,10 @@ def assemble_full_configuration(
 def _summarize_results(
     chain: pk.SerialChain, solution: pk.IKSolution, targets: pk.Transform3d, arm_name: str
 ,verbose:bool = False) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    """
+    Summarieses the result of the IK solution, Returns successes and joint angle configs. 
+    """
+
     converged_any = solution.converged_any
     success_ids = torch.nonzero(converged_any, as_tuple=False).flatten()
     total = converged_any.numel()
@@ -144,3 +149,54 @@ def _sample_reachable_targets(chain: pk.SerialChain, joint_limits: torch.Tensor,
     q = torch.rand(num_targets, chain.n_joints, device=chain.device, dtype=chain.dtype) * (high - low) + low
     goal_poses = chain.forward_kinematics(q)
     return q, goal_poses
+
+@lru_cache(maxsize=1)
+def get_robot_chains(device):
+    """
+    Return the kinematic chains for left and right EE, as well as the robot
+    """
+    URDF = "/home/adamfi/codes/base-pose-sequencing/conf/motion/robot.urdf"
+    robot_chain = pk.build_chain_from_urdf(open(URDF).read())
+    robot_chain.to(device=device)
+    left = pk.SerialChain(robot_chain, end_frame_name="gripper_l_base", root_frame_name="base_link")
+    right = pk.SerialChain(robot_chain, end_frame_name="gripper_r_base", root_frame_name="base_link")
+    left.to(device=device)
+    right.to(device=device)
+    return left, right, robot_chain
+
+# Caches the kinematics solver, meaning that we do not rebuild the every time the function is called
+@lru_cache(maxsize=1)
+def get_robot_IK(device):
+
+    default_tensor = torch.tensor([-1.27,1.262,-1.84,-1.84,0.28,-0.398,0.49,0.362,2.08,-2.114,1.94, 1.950,-0.03, 0.129], device=device)
+    left_default = default_tensor[0::2].unsqueeze(0).to(device=device)
+    right_default =default_tensor[1::2].unsqueeze(0).to(device=device)
+
+    left, right,_ = get_robot_chains(device)
+    
+
+    lim_r = torch.tensor(right.get_joint_limits(), device=device)
+    lim_l = torch.tensor(left.get_joint_limits(), device=device)
+
+
+    right_kinematics_solver = pk.PseudoInverseIK(right,
+                                                    retry_configs=right_default, 
+                                                    #num_retries=30,
+                                                    joint_limits=lim_r.T,
+                                                    max_iterations=30,
+                                                    early_stopping_any_converged=True,
+                                                    #early_stopping_no_improvement="all",
+                                                    lr = 0.2
+                                                        )
+    left_kinematics_solver = pk.PseudoInverseIK(left, 
+                                                    retry_configs=left_default,
+                                                    #num_retries=30,
+                                                    joint_limits=lim_l.T,
+                                                    max_iterations=30,
+                                                    early_stopping_any_converged=True,
+                                                    #early_stopping_no_improvement="all",
+                                                    lr = 0.2
+                                                        )
+
+
+    return left, right, left_default, right_default

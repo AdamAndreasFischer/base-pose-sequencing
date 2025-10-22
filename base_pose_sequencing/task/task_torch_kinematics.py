@@ -1128,7 +1128,6 @@ class Task(Environment):
         self.camera.add_semantic_segmentation_to_frame()
 
         self.obstacles = []
-
         # Add obstacles to the scene
         for i in range(self.no_of_obstacles):
             # Randomly select between cube or cylinder

@@ -32,7 +32,7 @@ from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg, RigidObject, RigidObjectCfg, RigidObjectCollectionCfg
 
 from isaaclab.sensors import ContactSensorCfg
-from isaaclab.sensors import FrameTransformerCfg
+from isaaclab.sensors import FrameTransformerCfg, OffsetCfg
 from isaaclab.sensors.camera.tiled_camera import TiledCamera
 from isaaclab.sensors.camera.tiled_camera_cfg import TiledCameraCfg
 from isaaclab.sensors.camera.camera_cfg import CameraCfg
@@ -48,7 +48,7 @@ import isaaclab.sim as sim_utils
 from base_pose_sequencing.task.mdp.terminations import collision_check
 #from base_pose_sequencing.task.mdp.observations import obj_pose_in_robot_frame
 from base_pose_sequencing.task.mdp.actions import MoveBaseActionCfg
-from base_pose_sequencing.task.mdp.rewards import collision
+from base_pose_sequencing.task.mdp.rewards import collision, pick_reward
 from base_pose_sequencing.task.mdp.reset import reset_object_state_uniform, reset_obstacles,reset_robot_state, reset_obstacles_singular, reset_table, zero_velocities
 from base_pose_sequencing.utils.isaac import generate_object_collection
 
@@ -64,6 +64,22 @@ def gen_path(num_obj):
     for i in range(num_obj):
         path = "{ENV_REGEX_NS}/Object_"+str(i)
         print(path)
+
+class Kinematic_solver:
+    def __init__(self):
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        
+        self.robot_chain = pk.build_chain_from_urdf(open(ROOT_PATH+"/base-pose-sequencing/conf/motion/robot.urdf").read())
+        
+        self.robot_chain.to(device= self.device)
+        
+        self.right_chain = pk.SerialChain(self.robot_chain, end_frame_name="gripper_r_base", root_frame_name="yumi_body")
+        
+        self.right_chain.to(device= self.device)
+        self.left_chain = pk.SerialChain(self.robot_chain, end_frame_name="gripper_l_base", root_frame_name="yumi_body")
+        self.left_chain.to(device= self.device)
+        
+
 
 @configclass
 class BasePosePlanningSceneCfg(InteractiveSceneCfg):
@@ -96,7 +112,8 @@ class BasePosePlanningSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.UsdFileCfg(
             usd_path=ROOT_PATH + "ridgeback_yumi/ridgeback_yumi.usd",
             articulation_props=sim_utils.ArticulationRootPropertiesCfg(enabled_self_collisions=True),
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity = None,kinematic_enabled=False, rigid_body_enabled=True)
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity = None,kinematic_enabled=False, rigid_body_enabled=True),
+                   
         ),
         init_state=ArticulationCfg.InitialStateCfg(
             joint_pos={
@@ -183,7 +200,9 @@ class BasePosePlanningSceneCfg(InteractiveSceneCfg):
                 damping=1e3,
             ),
         },
+        
     )
+
 
 
     # Table
@@ -200,7 +219,9 @@ class BasePosePlanningSceneCfg(InteractiveSceneCfg):
         init_state=RigidObjectCfg.InitialStateCfg(
             pos=(0.0, 0.0, 0.0 + 0.28), rot=(0, 0, 0, 1)),
     )
+    
 
+    # Can not initialize here as the process of the CFG can not handle non asset attributes
     #device = "cuda" if torch.cuda.is_available() else "cpu"
 #
     #robot_chain = pk.build_chain_from_urdf(open(ROOT_PATH+"/base-pose-sequencing/conf/motion/robot.urdf").read())
@@ -247,8 +268,8 @@ class BasePosePlanningSceneCfg(InteractiveSceneCfg):
             activate_contact_sensors=True, 
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
-            pos=(2.0,-2.0,0.18),
-            #pos=(random.uniform(-2.5,2.5),random.uniform(-2.5,2.5),0.18),
+            #pos=(2.0,-2.0,0.18),
+            pos=(random.uniform(-2.5,2.5),random.uniform(-2.5,2.5),0.18),
             rot = (0,0,0,1),
         )
     )
@@ -425,6 +446,8 @@ class ActionsCfg:
         )
     )
 
+
+
 @configclass
 class ObservationCfg:
     """Observation class defining the observations extracted from the environment"""
@@ -459,10 +482,14 @@ class RewardsCfg:
 
     terminating = RewTerm(func = collision, 
                           params={
-                              "robot_cfg": SceneEntityCfg("robot")
+                              "robot_cfg": SceneEntityCfg("robot"),
+                             
                           },
                           weight= 1.0,
                           )
+
+    pick_reward = RewTerm(func = pick_reward,
+                         weight = 1.0)
 
 @configclass
 class TerminationsCfg:
@@ -472,7 +499,7 @@ class TerminationsCfg:
     time_out_el = DoneTerm(func=mdp.time_out, time_out=True)
 
     # (2) Time out for collision 
-    time_out_collision = DoneTerm(func=collision_check, params={"robot_cfg": SceneEntityCfg("robot")})
+    time_out_collision = DoneTerm(func=collision_check, params={"threshold": 100.0})
 
 
 @configclass
@@ -493,6 +520,8 @@ class BasePosePlanningEnvCfg(ManagerBasedRLEnvCfg):
     rewards: RewardsCfg = RewardsCfg()
     terminations: TerminationsCfg = TerminationsCfg()
 
+
+
     def __post_init__(self) -> None:
         """Post initialization.
         Decimation: INT 
@@ -500,7 +529,12 @@ class BasePosePlanningEnvCfg(ManagerBasedRLEnvCfg):
         For instance, if the simulation dt is 0.01s and the policy dt is 0.1s, then the decimation is 10. This means that the control action is updated every 10 simulation steps.
 
         """
-        print("In post")
+        # Torch IK solver 
+       
+        self.default_joint_angles:torch.tensor = torch.tensor([-1.27,1.262,-1.84,-1.84,0.28,-0.398,0.49,0.362,2.08,-2.114,1.94, 1.950,-0.03, 0.129], device="cuda" if torch.cuda.is_available else "cpu")
+        self.left_default = self.default_joint_angles[0::2].unsqueeze(0)
+        self.right_default = self.default_joint_angles[1::2].unsqueeze(0)
+ 
         # general settings
         self.decimation = 1 #Timesteps per action, i.e waits N timesteps for next control action
         self.episode_length_s = 2        # sim.dt * decimation (_s: in seconds) How long the episode is in seconds 
@@ -512,7 +546,23 @@ class BasePosePlanningEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.physics_dt = 1/60
         self.sim.dt = 1/20 # Step time of environment. Ex, 1 s ep lenght, 1/10 dt would give 10 steps
         self.sim.render_interval = self.decimation
-        print("Pre scene intiation")
+        #self.ik_solver = Kinematic_solver()
         self.scene = BasePosePlanningSceneCfg(num_envs=10, env_spacing=10.0)
-        print("Scene intiated")
+
+        #device = "cuda" if torch.cuda.is_available() else "cpu"
+        #print("Device set")
+        #self.robot_chain = pk.build_chain_from_urdf(open(ROOT_PATH+"/base-pose-sequencing/conf/motion/robot.urdf").read())
+        #print("robot chain")
+        #self.robot_chain.to(device= device)
+        #print("to device")
+        #self.right_chain = pk.SerialChain(self.robot_chain, end_frame_name="gripper_r_base", root_frame_name="yumi_body")
+        #print("Right chain")
+        #self.right_chain.to(device= device)
+        #self.left_chain = pk.SerialChain(self.robot_chain, end_frame_name="gripper_l_base", root_frame_name="yumi_body")
+        #self.left_chain.to(device= device)
+        #print("Torch ik initated")
+
+
+
+        
         
