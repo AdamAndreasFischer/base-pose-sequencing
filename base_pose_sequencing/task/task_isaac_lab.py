@@ -57,7 +57,7 @@ NUM_OBJECTS = 5
 NUM_OBSTACLES= 3
 TABLE_X_MIN_MAX = (-0.8,0.8)
 TABLE_Y_MIN_MAX= ((-0.4,0.4))
-RANDOMIZE = True
+RANDOMIZE = False
 
 
 def gen_path(num_obj):
@@ -262,9 +262,9 @@ class BasePosePlanningSceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/obstacle",
         spawn = sim_utils.UsdFileCfg(
             usd_path=ROOT_PATH + "base-pose-sequencing/assets/obstacle_contact_sensor.usd",
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity = False,kinematic_enabled=False, rigid_body_enabled=True),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity = True,kinematic_enabled=False, rigid_body_enabled=True),
             mass_props=sim_utils.MassPropertiesCfg(mass=1000.0),
-            collision_props=sim_utils.CollisionPropertiesCfg(collision_enabled=True),
+            collision_props=sim_utils.CollisionPropertiesCfg(collision_enabled=False),
             activate_contact_sensors=True, 
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
@@ -537,11 +537,11 @@ class BasePosePlanningEnvCfg(ManagerBasedRLEnvCfg):
  
         # general settings
         self.decimation = 1 #Timesteps per action, i.e waits N timesteps for next control action
-        self.episode_length_s = 2        # sim.dt * decimation (_s: in seconds) How long the episode is in seconds 
+        self.episode_length_s = 1/2        # sim.dt * decimation (_s: in seconds) How long the episode is in seconds 
         self.rerender_on_reset = True
 
         # viewer settings
-        self.viewer.eye = (0.0, 0.0, 40.0)
+        self.viewer.eye = (-4.9, -4.2, 2.5)
         # simulation settings
         self.sim.physics_dt = 1/60
         self.sim.dt = 1/20 # Step time of environment. Ex, 1 s ep lenght, 1/10 dt would give 10 steps
@@ -549,19 +549,7 @@ class BasePosePlanningEnvCfg(ManagerBasedRLEnvCfg):
         #self.ik_solver = Kinematic_solver()
         self.scene = BasePosePlanningSceneCfg(num_envs=10, env_spacing=10.0)
 
-        #device = "cuda" if torch.cuda.is_available() else "cpu"
-        #print("Device set")
-        #self.robot_chain = pk.build_chain_from_urdf(open(ROOT_PATH+"/base-pose-sequencing/conf/motion/robot.urdf").read())
-        #print("robot chain")
-        #self.robot_chain.to(device= device)
-        #print("to device")
-        #self.right_chain = pk.SerialChain(self.robot_chain, end_frame_name="gripper_r_base", root_frame_name="yumi_body")
-        #print("Right chain")
-        #self.right_chain.to(device= device)
-        #self.left_chain = pk.SerialChain(self.robot_chain, end_frame_name="gripper_l_base", root_frame_name="yumi_body")
-        #self.left_chain.to(device= device)
-        #print("Torch ik initated")
-
+ 
 
 
         

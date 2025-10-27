@@ -199,4 +199,4 @@ def get_robot_IK(device):
                                                         )
 
 
-    return left, right, left_default, right_default
+    return left_kinematics_solver, right_kinematics_solver, left_default, right_default
