@@ -16,7 +16,7 @@ import isaacsim.core.utils.bounds as bounds_utils
 from base_pose_sequencing.utils.collision import check_if_robot_is_in_collision
 from base_pose_sequencing.utils.torch_kinematics import _summarize_results
 from base_pose_sequencing.utils.torch_kinematics import assemble_full_configuration, compute_dual_arm_end_effector_poses, _summarize_results, get_robot_IK, get_robot_chains
-
+from base_pose_sequencing.utils.common import parse_prim_paths
 from base_pose_sequencing.task.mdp.terminations import collision_check
 
 
@@ -55,6 +55,15 @@ def pick_reward(env: "ManagerBasedRLEnv",
     Function of choosing arm for picking
 
     """
+    
+    objects = env.scene["object"]
+    obj_poses = objects.data.object_link_state_w[..., :7] # C.O.M states
+    reward = torch.zeros((env.num_envs),device=env.device)
+    # Initialization of picked_objects
+    if env.cfg.picked_objects.shape[0]!=obj_poses.shape[0]*obj_poses.shape[1]:
+        env.cfg.picked_objects = torch.zeros((obj_poses.shape[0]*obj_poses.shape[1]))
+
+    # Get crucial functions for the robots
     robot_conf={}
     robot = env.scene["robot"]
     left_chain, right_chain, robot_chain = get_robot_chains(env.device)
@@ -69,24 +78,53 @@ def pick_reward(env: "ManagerBasedRLEnv",
     robot_conf["left_default"]  = left_default
     robot_conf["right_default"] = right_default
 
-    obj_poses = env.scene["object"].data.object_link_state_w[..., :7] # C.O.M state
+    
+    # Picked objects. O if not picked, 1 if picked
+    picked_objects = env.cfg.picked_objects
+    object_prim_paths = env.scene["object"].root_physx_view.prim_paths
+    #print("Dir of physx view: ", dir(env.scene["object"]))
+    obj_indices = torch.arange(0,picked_objects.shape[0], device=env.device, dtype=torch.uint8) # Gives an index to each prim path in the list
+    ordered_paths = sorted(object_prim_paths, key=parse_prim_paths) # Prim paths ordered in after environment
+
+    # Initialize poses
     
     robot_pose = robot.data.root_state_w[..., :7] # Root state, i.e ridgeback root state [20,7] xyz qw qx qy qz
-    print(robot_pose.shape)
+   
     n_obj = obj_poses.shape[1]
     
     env_ids = torch.arange(0,obj_poses.shape[0]).unsqueeze(-1).to(device=env.device)
 
     env_ids_expanded = env_ids.repeat_interleave(n_obj, dim=0)
-    print(env_ids_expanded)
 
     origins = env.scene.env_origins[env_ids]
 
     obj_poses_flattened = obj_poses.reshape(-1, obj_poses.shape[-1]) 
-   
+
+    # Select arms for grasping 
     arm_id = select_robot_arm_for_grasping(poses_global=obj_poses_flattened, robot_poses_global=robot_pose, origin_poses=origins, robot_conf=robot_conf, device=env.device, n_obj=n_obj)
     
+    # Get graps poses
     _, grasp_matrices = get_grasp_pose(poses_global=obj_poses_flattened, n_obj=n_obj, origins=origins, robot_poses=robot_pose, device=env.device)
+
+    # Remove already picked objects from consideration
+
+    #print("Pre filtering: ", arm_id.shape)
+    #print(grasp_matrices.shape)
+    
+    arm_id = arm_id[picked_objects==0]
+    
+    grasp_matrices = grasp_matrices[picked_objects==0]
+    
+    obj_indices = obj_indices[picked_objects==0]
+    
+    env_ids_expanded = env_ids_expanded[picked_objects==0]
+    
+    
+    #print("Picked object: ",picked_objects)
+    #print(arm_id.shape)
+    #print(grasp_matrices.shape)
+
+    # Split up targets poses for their corresponding manipulator
 
     left_mask = (arm_id==1)
     right_mask = (arm_id==0)
@@ -97,10 +135,13 @@ def pick_reward(env: "ManagerBasedRLEnv",
     l_envs = env_ids_expanded[left_mask]
     r_envs = env_ids_expanded[right_mask]
 
-    success_ids = torch.zeros(env.num_envs * n_obj, device=env.device, dtype=torch.uint8)
+    r_indices = obj_indices[right_mask]
+    l_indices = obj_indices[left_mask]
+
     exists_l = False
     exists_r= False
 
+    # Find IK solutions for both arms
 
     if l_target_poses.shape[0]>0:
         l_targets = pk.transform3d.Transform3d(default_batch_size=l_target_poses.shape[0], matrix=l_target_poses, device=env.device)
@@ -112,10 +153,10 @@ def pick_reward(env: "ManagerBasedRLEnv",
         action_l = left_configs
         success_l = solution.converged_any
         left_success_env_id = l_envs[success_l]
+        l_picked_indices = l_indices[success_l]
 
-
-        print("Successes left: ", success_l)
-        print("Success env ids left: ", left_success_env_id)
+        #print("Successes left: ", success_l)
+        #print("Success env ids left: ", left_success_env_id)
         if torch.any(success_l!=False).item():
              exists_l=True
         
@@ -126,28 +167,50 @@ def pick_reward(env: "ManagerBasedRLEnv",
         action_r = right_configs
         success_r = solution.converged_any
         right_success_env_id = r_envs[success_r]
-        print("Successes right: ", success_r)
-        print("Success env ids right: ", right_success_env_id)
+        r_picked_indices = r_indices[success_r]
+
+        #print("Successes right: ", success_r)
+        #print("Success env ids right: ", right_success_env_id)
         if torch.any(success_r!=False).item():
              exists_r=True
- 
+    
+    # For visualization. Move arms to found joint angles
     if exists_r: # Batch joint angles
         velocities = torch.zeros_like(action_r[0])
         for i,action in enumerate(action_r):
             env_id = right_success_env_id[i]
-            print("Right env id: ", env_id)
+  
             env.scene["robot"].write_joint_state_to_sim(position= action, velocity = velocities, joint_ids= right_indices, env_ids = env_id.unsqueeze(0))
-            for i in range(10):
+            for i in range(1):
                 env.sim.render()
+    if exists_r:    
+        for index in r_picked_indices:
+            #print(index)
+            env_id = env_ids_expanded[index]
+            prim_path = ordered_paths[index.item()]
+            env.cfg.picked_objects[index.item()] = 1
+            objects.set_visibility(False, prim_path, env_id)
+            reward[env_id] +=1
+
+
     if exists_l:
         velocities = torch.zeros_like(action_l[0])
         for i,action in enumerate(action_l):
             env_id = left_success_env_id[i]
-            print("Left env id: ", env_id)
+       
             env.scene["robot"].write_joint_state_to_sim(position= action, velocity = velocities ,joint_ids= left_indices, env_ids=env_id.unsqueeze(0))
-            for i in range(10):
+            for i in range(1):
                 env.sim.render()
+    if exists_l:    
+        for index in l_picked_indices:
+            #print(index)
+            env_id = env_ids_expanded[index]
+            prim_path = ordered_paths[index.item()]
+            env.cfg.picked_objects[index.item()] = 1
+            objects.set_visibility(False, prim_path, env_id)
+            reward[env_id] +=1
          
+    #print(env.cfg.picked_objects)
 
     return torch.zeros(env.num_envs, device=env.device)
 

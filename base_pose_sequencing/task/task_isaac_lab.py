@@ -60,27 +60,6 @@ TABLE_Y_MIN_MAX= ((-0.4,0.4))
 RANDOMIZE = False
 
 
-def gen_path(num_obj):
-    for i in range(num_obj):
-        path = "{ENV_REGEX_NS}/Object_"+str(i)
-        print(path)
-
-class Kinematic_solver:
-    def __init__(self):
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        
-        self.robot_chain = pk.build_chain_from_urdf(open(ROOT_PATH+"/base-pose-sequencing/conf/motion/robot.urdf").read())
-        
-        self.robot_chain.to(device= self.device)
-        
-        self.right_chain = pk.SerialChain(self.robot_chain, end_frame_name="gripper_r_base", root_frame_name="yumi_body")
-        
-        self.right_chain.to(device= self.device)
-        self.left_chain = pk.SerialChain(self.robot_chain, end_frame_name="gripper_l_base", root_frame_name="yumi_body")
-        self.left_chain.to(device= self.device)
-        
-
-
 @configclass
 class BasePosePlanningSceneCfg(InteractiveSceneCfg):
     """Configuration for obj tracking state scene."""
@@ -534,7 +513,8 @@ class BasePosePlanningEnvCfg(ManagerBasedRLEnvCfg):
         self.default_joint_angles:torch.tensor = torch.tensor([-1.27,1.262,-1.84,-1.84,0.28,-0.398,0.49,0.362,2.08,-2.114,1.94, 1.950,-0.03, 0.129], device="cuda" if torch.cuda.is_available else "cpu")
         self.left_default = self.default_joint_angles[0::2].unsqueeze(0)
         self.right_default = self.default_joint_angles[1::2].unsqueeze(0)
- 
+
+
         # general settings
         self.decimation = 1 #Timesteps per action, i.e waits N timesteps for next control action
         self.episode_length_s = 1/2        # sim.dt * decimation (_s: in seconds) How long the episode is in seconds 
@@ -548,6 +528,8 @@ class BasePosePlanningEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.render_interval = self.decimation
         #self.ik_solver = Kinematic_solver()
         self.scene = BasePosePlanningSceneCfg(num_envs=10, env_spacing=10.0)
+        print("num envs: ", self.scene.num_envs)
+        self.picked_objects = torch.zeros((self.scene.num_envs*NUM_OBJECTS,),device="cuda" if torch.cuda.is_available else "cpu", dtype=torch.uint8) # Placeholder to initialize later
 
  
 

@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
 from base_pose_sequencing.utils.collision import check_if_robot_is_in_collision
+from base_pose_sequencing.utils.common import parse_prim_paths
 
 def reset_object_state_uniform(
     env: ManagerBasedRLEnv,
@@ -83,6 +84,14 @@ def reset_object_state_uniform(
     # set into the physics simulation
     asset.write_object_pose_to_sim(torch.cat([positions, orientations], dim=-1), env_ids=env_ids)
     asset.write_object_velocity_to_sim(velocities, env_ids=env_ids)
+    
+    
+    object_prim_paths = env.scene["object"].root_physx_view.prim_paths
+    ordered_paths = sorted(object_prim_paths, key=parse_prim_paths) # Prim paths ordered in after environment
+    asset.set_visibility(True, prim_paths=ordered_paths)
+
+    env.cfg.picked_objects = torch.zeros((obj_root_states.shape[0]*obj_root_states.shape[1]), device=env.device, dtype=torch.uint8)
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         for i in range(10):
@@ -138,6 +147,8 @@ def reset_robot_state(env: ManagerBasedRLEnv,
         asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")):
     
     
+    joint_indices = [3,4,7,8,9,10,11,12,13,14,16,16,17,18]
+    joint_vel = torch.zeros_like(env.cfg.default_joint_angles, device=env.device)
     asset: RigidObject | Articulation = env.scene[asset_cfg.name]
     
     local_env_ids = copy.deepcopy(env_ids)
@@ -185,6 +196,7 @@ def reset_robot_state(env: ManagerBasedRLEnv,
             
         else:
             not_suitable_pose = False
+    asset.write_joint_state_to_sim(position= env.cfg.default_joint_angles, velocity = joint_vel, joint_ids= joint_indices, env_ids = None)
         
 
 def reset_obstacles_singular(env: ManagerBasedRLEnv,
