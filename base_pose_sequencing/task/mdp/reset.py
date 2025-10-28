@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
 from base_pose_sequencing.utils.collision import check_if_robot_is_in_collision
 from base_pose_sequencing.utils.common import parse_prim_paths
+from base_pose_sequencing.utils.isaac import set_visibility_multi_object
 
 def reset_object_state_uniform(
     env: ManagerBasedRLEnv,
@@ -88,8 +89,8 @@ def reset_object_state_uniform(
     
     object_prim_paths = env.scene["object"].root_physx_view.prim_paths
     ordered_paths = sorted(object_prim_paths, key=parse_prim_paths) # Prim paths ordered in after environment
-    asset.set_visibility(True, prim_paths=ordered_paths)
-
+    #asset.set_visibility(True, prim_paths=ordered_paths)
+    #set_visibility_multi_object(True, prim_paths=ordered_paths)
     env.cfg.picked_objects = torch.zeros((obj_root_states.shape[0]*obj_root_states.shape[1]), device=env.device, dtype=torch.uint8)
 
     with warnings.catch_warnings():

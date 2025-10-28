@@ -18,7 +18,7 @@ from base_pose_sequencing.utils.torch_kinematics import _summarize_results
 from base_pose_sequencing.utils.torch_kinematics import assemble_full_configuration, compute_dual_arm_end_effector_poses, _summarize_results, get_robot_IK, get_robot_chains
 from base_pose_sequencing.utils.common import parse_prim_paths
 from base_pose_sequencing.task.mdp.terminations import collision_check
-
+from base_pose_sequencing.utils.isaac import set_visibility_multi_object
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
@@ -95,6 +95,7 @@ def pick_reward(env: "ManagerBasedRLEnv",
     env_ids = torch.arange(0,obj_poses.shape[0]).unsqueeze(-1).to(device=env.device)
 
     env_ids_expanded = env_ids.repeat_interleave(n_obj, dim=0)
+    print("Shape of env ids expanded pre filter: ", env_ids_expanded)
 
     origins = env.scene.env_origins[env_ids]
 
@@ -118,6 +119,7 @@ def pick_reward(env: "ManagerBasedRLEnv",
     obj_indices = obj_indices[picked_objects==0]
     
     env_ids_expanded = env_ids_expanded[picked_objects==0]
+    print("Shape of env ids expanded post filer: ", env_ids_expanded.shape)
     
     
     #print("Picked object: ",picked_objects)
@@ -183,16 +185,25 @@ def pick_reward(env: "ManagerBasedRLEnv",
             env.scene["robot"].write_joint_state_to_sim(position= action, velocity = velocities, joint_ids= right_indices, env_ids = env_id.unsqueeze(0))
             for i in range(1):
                 env.sim.render()
+    far_away_pose = torch.tensor([[[99.0, 99.0, 1.0, 0.0, 0.0, 0.0, 1.0]]], device=env.device) # (1,1,7)
     if exists_r:    
         for index in r_picked_indices:
             #print(index)
-            env_id = env_ids_expanded[index]
+            env_id = env_ids_expanded[index.item()]
             prim_path = ordered_paths[index.item()]
             env.cfg.picked_objects[index.item()] = 1
-            objects.set_visibility(False, prim_path, env_id)
+            #objects.set_visibility(False, prim_path, env_id)
+            #set_visibility_multi_object(False, prim_path, env_id)
+            object_index = index % objects.num_objects  # Get object index within environment
+            print(object_index.reshape(1).shape)
+            print(env_id)
+            print(env_id.shape)
+            print(env_id.ndim)
+            print(objects.data.object_state_w.shape)
+            objects.write_object_pose_to_sim(far_away_pose, env_ids=env_id, object_ids=object_index.reshape(1)) # cant be done in batch as it move all objects of same indice in each environment
             reward[env_id] +=1
 
-
+    
     if exists_l:
         velocities = torch.zeros_like(action_l[0])
         for i,action in enumerate(action_l):
@@ -204,12 +215,23 @@ def pick_reward(env: "ManagerBasedRLEnv",
     if exists_l:    
         for index in l_picked_indices:
             #print(index)
-            env_id = env_ids_expanded[index]
+            env_id = env_ids_expanded[index.item()]
             prim_path = ordered_paths[index.item()]
             env.cfg.picked_objects[index.item()] = 1
-            objects.set_visibility(False, prim_path, env_id)
+            #objects.set_visibility(False, prim_path, env_id)
+            #set_visibility_multi_object(False, prim_path, env_id)
+            # Move picked object far away instead of hiding
+            
+            object_index = index % objects.num_objects  # Get object index within environment
+            print(object_index.reshape(1).shape)
+            print(env_id)
+            print(env_id.shape)
+            print(env_id.ndim)
+            print(objects.data.object_state_w.shape)
+            objects.write_object_pose_to_sim(far_away_pose, env_ids=env_id, object_ids=object_index.reshape(1))
             reward[env_id] +=1
          
+
     #print(env.cfg.picked_objects)
 
     return torch.zeros(env.num_envs, device=env.device)

@@ -1,24 +1,15 @@
 import numpy as np
 from matplotlib import pyplot as plt
-import hydra
-from omegaconf import DictConfig, OmegaConf
-import os
-from shapely.geometry import Polygon
-import math
-import networkx as nx
 
-from math import pi
-from shapely.ops import linemerge, unary_union, polygonize
-from shapely.geometry import LineString, Polygon, Point, box
-from shapely.ops import split
+import torch
 
-import matplotlib.cm as cm
-import matplotlib
-from tqdm import tqdm
 from scipy.spatial.transform import Rotation
 from typing import Union
 from pxr import Sdf, Usd, UsdGeom
-from isaacsim.core.utils.stage import get_current_stage
+
+from collections.abc import Sequence
+import isaacsim.core.utils.prims as prim_utils
+import isaaclab.sim as sim_utils
 
 from pxr import Gf, Sdf
 
@@ -144,3 +135,29 @@ def generate_object_collection(num_obj, root_path,path):
             ))
         ridgid_objects[name] = obj
     return ridgid_objects
+
+
+def set_visibility_multi_object(visible: bool, prim_paths:str|list|None= None,  env_ids: Sequence[int] | None = None):
+    """This does not work well. Change to moving the obstacles far away instead"""
+    if visible:
+        attribute = "inherited"
+    else:
+        attribute = "invisible"
+
+    if isinstance(prim_paths, list):
+        # iterate over the environment ids
+        for prim_path in prim_paths:
+            prim = sim_utils.find_matching_prims(prim_path)[0]
+            prim_utils.set_prim_visibility(prim, visible)
+    else:
+        prim = sim_utils.find_matching_prims(prim_paths)
+        
+        prim_utils.set_prim_visibility(prim[0], visible)
+
+def move_object_out_of_view(object: RigidObject|None = None, env_ids: Sequence[int]|None = None):
+    """Moves object out of view as visibility change is not supported on GPU physix"""
+
+
+
+    dump = torch.tensor([99.0,99.0,1.0]) # Dump unwanted objects in a corner far away
+

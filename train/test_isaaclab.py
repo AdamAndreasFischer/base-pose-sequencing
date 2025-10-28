@@ -5,8 +5,10 @@ from isaaclab.app import AppLauncher
 from omegaconf import OmegaConf, DictConfig
 import hydra
 import time
+import os
+import traceback
 parser = argparse.ArgumentParser(description="Testfile for running isaacLab")
-parser.add_argument("--num_envs", type=int, default=2, help="Number of parallel envs")
+parser.add_argument("--num_envs", type=int, default=1, help="Number of parallel envs")
 #parser.add_argument("--enable_cameras")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
@@ -17,7 +19,7 @@ simulation_app = app_launcher.app
 import gymnasium as gym
 from gymnasium.spaces import Box, Dict
 import numpy as np
-import os
+
 import random
 from datetime import datetime
 import torch
@@ -103,10 +105,10 @@ def main():
 
         for i in range(300):
 
-            x = np.random.uniform(2.0, 2.01, (n_env,1))
-            y = np.random.uniform(-2.01, -2.0, (n_env,1))
+            x = np.zeros((n_env, 1))
+            y = np.ones((n_env, 1))
 
-            theta = np.random.uniform(-0.01, 0.01, (n_env,1))
+            theta = np.ones((n_env, 1))*-np.pi/2 
 
             action = np.concatenate((x,y,theta),axis=1)
 
@@ -150,6 +152,7 @@ def main():
         simulation_app.close()
     except Exception as e:
         print(f"Simulator crashed with error: {e}....")
+        print(traceback.format_exc())
         print("Shuting down....")
         simulation_app.close()
 if __name__ == "__main__":
