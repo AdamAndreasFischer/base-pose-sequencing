@@ -69,7 +69,7 @@ class MoveBaseAction(ActionTerm):
         (meters for x,y, radians for theta).
         """
         self._raw_actions = actions.clone()
-
+        print("In actions: ", actions)
         # Get limits from config
         lims = self.cfg.clip
 

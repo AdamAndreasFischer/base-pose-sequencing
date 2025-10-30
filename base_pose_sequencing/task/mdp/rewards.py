@@ -4,7 +4,9 @@ import torch
 import numpy as np
 from scipy.spatial.transform import Rotation
 from typing import TYPE_CHECKING
-
+import matplotlib.pyplot as plt
+import collections
+import time
 from isaaclab.assets import Articulation, RigidObject
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.managers.manager_base import ManagerTermBase
@@ -19,19 +21,37 @@ from base_pose_sequencing.utils.torch_kinematics import assemble_full_configurat
 from base_pose_sequencing.utils.common import parse_prim_paths
 from base_pose_sequencing.task.mdp.terminations import collision_check
 from base_pose_sequencing.utils.isaac import set_visibility_multi_object
+from base_pose_sequencing.utils.navigation import parallel_Astar, a_star, visualize_path
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
 def collision(env: "ManagerBasedRLEnv",
               robot_cfg: SceneEntityCfg= SceneEntityCfg("robot"),
-              reward_multiplier: float = 1.0):
+              ):
 
     collisions = collision_check(env, threshold=100).to(torch.uint8)
 
-    collisions = 0 - collisions # return -1 for collision, 0 if no collision
+    # return 1 for collision, 0 if no collision
 
-    return collisions* reward_multiplier
+    return collisions
+
+def get_costmap(env, camera):
+    costmaps = torch.zeros((env.num_envs, 160,160))
+    segmentation_map = env.scene["camera"].data.output["semantic_segmentation"].squeeze(-1)
+    camera_info = camera.data.info
+
+    for i in range(segmentation_map.shape[0]):
+        idToLabels= camera_info[i]["semantic_segmentation"]["idToLabels"]
+        costmap = costmaps[i]
+        for key,value in idToLabels.items():
+         
+            if "table" in value or "obstacle" in value:
+        
+                costmap[segmentation_map[i]==int(key)] = 1
+        costmaps[i] = costmap
+    
+    return costmaps
 
 def navcost(env: "ManagerBasedRLEnv",
             ):
@@ -40,11 +60,58 @@ def navcost(env: "ManagerBasedRLEnv",
     Function for calculating the navigation cost of the action. What is needed is to access the previous robot pose, the current robot pose, and with a path planner 
     decide what the cost of the base pose selection is. 
 
+    args: 
+    goals: torch.tensor [n_envs, 2] x,y coordinates of the goal
+    
+
     TODO: Fix variable for initial robot pose
     Fix path planner 
     Costmap extraction with obstacles
-    """
 
+    Parallel A* can find paths for 40 envs in roughly 3.5 s, as compared to 36 for sequential
+    """
+    camera = env.scene["camera"]
+    robot = env.scene["robot"]
+    
+    costmaps = get_costmap(env, camera)
+    
+    goals = torch.randint(low=10, high=20, size=(costmaps.shape[0],2))
+    starts = torch.randint(low=30, high=40, size=(costmaps.shape[0],2))
+    #parallel_time_s = time.time()
+
+
+    paths = parallel_Astar(costmaps=costmaps, goal=goals, start=starts, clearance=8)
+    #parallel_time_e = time.time()
+
+    #serial_time_s = time.time()
+    #for i in range(costmaps.shape[0]):
+    #    costmap = costmaps[i].cpu().numpy()
+    #    start = starts[i].cpu().numpy()
+    #    goal = goals[i].cpu().numpy()
+    #    path, id = a_star(costmap, start=(start[0],start[1]), goal=(goal[0],goal[1]), clearance=8, id=i)
+    #serial_time_e = time.time()
+#
+    #print("Parallel time: ", parallel_time_e-parallel_time_s)
+    #print("Serial time: ", serial_time_e-serial_time_s)
+
+  
+    #print("Normal A*: ", path)
+    #print("Parallel A*: ", paths[i])
+    
+    path_list = list(paths.values())
+
+    rewards = torch.zeros((env.num_envs), device=env.device)
+    for i,path in enumerate(path_list):
+        if path == None:
+            rewards[i] =250
+            #print(starts[i])
+            #print(goals[i])
+            #plt.imshow(costmaps[i])
+            #plt.show()
+        else:
+            rewards[i] = len(path)
+    
+    return rewards
 
 
 def pick_reward(env: "ManagerBasedRLEnv",
@@ -82,7 +149,7 @@ def pick_reward(env: "ManagerBasedRLEnv",
     # Picked objects. O if not picked, 1 if picked
     picked_objects = env.cfg.picked_objects
     object_prim_paths = env.scene["object"].root_physx_view.prim_paths
-    #print("Dir of physx view: ", dir(env.scene["object"]))
+
     obj_indices = torch.arange(0,picked_objects.shape[0], device=env.device, dtype=torch.uint8) # Gives an index to each prim path in the list
     ordered_paths = sorted(object_prim_paths, key=parse_prim_paths) # Prim paths ordered in after environment
 
@@ -94,8 +161,7 @@ def pick_reward(env: "ManagerBasedRLEnv",
     
     env_ids = torch.arange(0,obj_poses.shape[0]).unsqueeze(-1).to(device=env.device)
 
-    env_ids_expanded = env_ids.repeat_interleave(n_obj, dim=0)
-    print("Shape of env ids expanded pre filter: ", env_ids_expanded)
+    env_ids_expanded_og = env_ids.repeat_interleave(n_obj, dim=0)
 
     origins = env.scene.env_origins[env_ids]
 
@@ -108,23 +174,14 @@ def pick_reward(env: "ManagerBasedRLEnv",
     _, grasp_matrices = get_grasp_pose(poses_global=obj_poses_flattened, n_obj=n_obj, origins=origins, robot_poses=robot_pose, device=env.device)
 
     # Remove already picked objects from consideration
-
-    #print("Pre filtering: ", arm_id.shape)
-    #print(grasp_matrices.shape)
-    
     arm_id = arm_id[picked_objects==0]
     
     grasp_matrices = grasp_matrices[picked_objects==0]
     
     obj_indices = obj_indices[picked_objects==0]
     
-    env_ids_expanded = env_ids_expanded[picked_objects==0]
-    print("Shape of env ids expanded post filer: ", env_ids_expanded.shape)
-    
-    
-    #print("Picked object: ",picked_objects)
-    #print(arm_id.shape)
-    #print(grasp_matrices.shape)
+    env_ids_expanded = env_ids_expanded_og[picked_objects==0]
+ 
 
     # Split up targets poses for their corresponding manipulator
 
@@ -183,23 +240,18 @@ def pick_reward(env: "ManagerBasedRLEnv",
             env_id = right_success_env_id[i]
   
             env.scene["robot"].write_joint_state_to_sim(position= action, velocity = velocities, joint_ids= right_indices, env_ids = env_id.unsqueeze(0))
-            for i in range(1):
-                env.sim.render()
+            #for i in range(1):
+            #    env.sim.render()
     far_away_pose = torch.tensor([[[99.0, 99.0, 1.0, 0.0, 0.0, 0.0, 1.0]]], device=env.device) # (1,1,7)
     if exists_r:    
         for index in r_picked_indices:
             #print(index)
-            env_id = env_ids_expanded[index.item()]
-            prim_path = ordered_paths[index.item()]
+            env_id = env_ids_expanded_og[index.item()]
             env.cfg.picked_objects[index.item()] = 1
-            #objects.set_visibility(False, prim_path, env_id)
-            #set_visibility_multi_object(False, prim_path, env_id)
+        
             object_index = index % objects.num_objects  # Get object index within environment
-            print(object_index.reshape(1).shape)
-            print(env_id)
-            print(env_id.shape)
-            print(env_id.ndim)
-            print(objects.data.object_state_w.shape)
+            object_index = object_index.to(dtype=torch.int64)
+        
             objects.write_object_pose_to_sim(far_away_pose, env_ids=env_id, object_ids=object_index.reshape(1)) # cant be done in batch as it move all objects of same indice in each environment
             reward[env_id] +=1
 
@@ -210,31 +262,25 @@ def pick_reward(env: "ManagerBasedRLEnv",
             env_id = left_success_env_id[i]
        
             env.scene["robot"].write_joint_state_to_sim(position= action, velocity = velocities ,joint_ids= left_indices, env_ids=env_id.unsqueeze(0))
-            for i in range(1):
-                env.sim.render()
+            #for i in range(1):
+            #    env.sim.render()
     if exists_l:    
         for index in l_picked_indices:
             #print(index)
-            env_id = env_ids_expanded[index.item()]
-            prim_path = ordered_paths[index.item()]
+            env_id = env_ids_expanded_og[index.item()]
             env.cfg.picked_objects[index.item()] = 1
-            #objects.set_visibility(False, prim_path, env_id)
-            #set_visibility_multi_object(False, prim_path, env_id)
+
             # Move picked object far away instead of hiding
-            
-            object_index = index % objects.num_objects  # Get object index within environment
-            print(object_index.reshape(1).shape)
-            print(env_id)
-            print(env_id.shape)
-            print(env_id.ndim)
-            print(objects.data.object_state_w.shape)
+            object_index = (index % objects.num_objects)  # Get object index within environment
+            object_index = object_index.to(dtype=torch.int64)
+          
             objects.write_object_pose_to_sim(far_away_pose, env_ids=env_id, object_ids=object_index.reshape(1))
             reward[env_id] +=1
          
-
+    print("In pick reward: ", reward)
     #print(env.cfg.picked_objects)
 
-    return torch.zeros(env.num_envs, device=env.device)
+    return reward
 
 
 
@@ -354,3 +400,5 @@ def get_grasp_pose(poses_global ,n_obj, origins, robot_poses, device):
         #print("Grasp poses: ", matrices_rTg)
         # print("Grasp pose in function:", grasp_pose)
         return grasp_poses, matrices_rTg
+
+

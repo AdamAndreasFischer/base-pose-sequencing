@@ -83,6 +83,7 @@ def reset_object_state_uniform(
     velocities = root_states[:, :, 7:13] + rand_samples
 
     # set into the physics simulation
+   
     asset.write_object_pose_to_sim(torch.cat([positions, orientations], dim=-1), env_ids=env_ids)
     asset.write_object_velocity_to_sim(velocities, env_ids=env_ids)
     
@@ -92,11 +93,12 @@ def reset_object_state_uniform(
     #asset.set_visibility(True, prim_paths=ordered_paths)
     #set_visibility_multi_object(True, prim_paths=ordered_paths)
     env.cfg.picked_objects = torch.zeros((obj_root_states.shape[0]*obj_root_states.shape[1]), device=env.device, dtype=torch.uint8)
-
+    env.scene["camera"].reset(env_ids)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         for i in range(10):
-            env.sim.step(render=True)
+            #env.sim.step(render=True)
+            env.render(recompute=True)
 
    
 # Currently not used. TODO: Add multi obstacle reset
@@ -117,8 +119,6 @@ def reset_obstacles(env: ManagerBasedRLEnv,
     range_list = [pose_range.get(key, (0.0, 0.0)) for key in ["x", "y", "z", "roll", "pitch", "yaw"]]
     ranges = torch.tensor(range_list, device=asset.device)
     
- 
-
     rand_samples = math_utils.sample_uniform(ranges[:, 0], ranges[:, 1], (len(env_ids), n_obstacles, 6), device=asset.device)
 
 
@@ -139,6 +139,7 @@ def reset_obstacles(env: ManagerBasedRLEnv,
     # set into the physics simulation
     asset.write_root_pose_to_sim(torch.cat([positions, orientations], dim=-1), env_ids=env_ids)
     asset.write_root_velocity_to_sim(velocities, env_ids=env_ids)
+    print("Reset done")
 
 
 def reset_robot_state(env: ManagerBasedRLEnv,
@@ -147,7 +148,7 @@ def reset_robot_state(env: ManagerBasedRLEnv,
         velocity_range: dict[str, tuple[float, float]],
         asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")):
     
-    
+    print("Reset robot")
     joint_indices = [3,4,7,8,9,10,11,12,13,14,16,16,17,18]
     joint_vel = torch.zeros_like(env.cfg.default_joint_angles, device=env.device)
     asset: RigidObject | Articulation = env.scene[asset_cfg.name]
@@ -197,7 +198,7 @@ def reset_robot_state(env: ManagerBasedRLEnv,
             
         else:
             not_suitable_pose = False
-    asset.write_joint_state_to_sim(position= env.cfg.default_joint_angles, velocity = joint_vel, joint_ids= joint_indices, env_ids = None)
+    #asset.write_joint_state_to_sim(position= env.cfg.default_joint_angles, velocity = joint_vel, joint_ids= joint_indices, env_ids = None)
         
 
 def reset_obstacles_singular(env: ManagerBasedRLEnv,
@@ -205,7 +206,7 @@ def reset_obstacles_singular(env: ManagerBasedRLEnv,
         pose_range: dict[str, tuple[float, float]],
         velocity_range: dict[str, tuple[float, float]],
         asset_cfg: SceneEntityCfg = SceneEntityCfg("obstacle")):
-
+    print("##################### RESET ##########################")
     asset: RigidObject | Articulation | RigidObjectCollection = env.scene[asset_cfg.name]
 
 
@@ -246,7 +247,7 @@ def reset_table(
         pose_range: dict[str, tuple[float, float]],
         velocity_range: dict[str, tuple[float, float]],
         asset_cfg: SceneEntityCfg = SceneEntityCfg("table")):
-   
+    print("Rest table")
     asset: RigidObject | Articulation | RigidObjectCollection = env.scene[asset_cfg.name]
 
     # poses

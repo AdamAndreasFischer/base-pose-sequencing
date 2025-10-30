@@ -37,6 +37,7 @@ from isaaclab.sensors.camera.tiled_camera import TiledCamera
 from isaaclab.sensors.camera.tiled_camera_cfg import TiledCameraCfg
 from isaaclab.sensors.camera.camera_cfg import CameraCfg
 from isaaclab.actuators import ImplicitActuatorCfg
+from isaaclab.sim import RenderCfg
 
 from isaaclab.utils import configclass
 import isaacsim.core.utils.numpy.rotations as rot_utils
@@ -48,16 +49,17 @@ import isaaclab.sim as sim_utils
 from base_pose_sequencing.task.mdp.terminations import collision_check
 #from base_pose_sequencing.task.mdp.observations import obj_pose_in_robot_frame
 from base_pose_sequencing.task.mdp.actions import MoveBaseActionCfg
-from base_pose_sequencing.task.mdp.rewards import collision, pick_reward
+from base_pose_sequencing.task.mdp.rewards import collision, pick_reward, navcost
 from base_pose_sequencing.task.mdp.reset import reset_object_state_uniform, reset_obstacles,reset_robot_state, reset_obstacles_singular, reset_table, zero_velocities
 from base_pose_sequencing.utils.isaac import generate_object_collection
+from base_pose_sequencing.utils.common import custom_image
 
 ROOT_PATH = "/home/adamfi/codes/"
 NUM_OBJECTS = 5
 NUM_OBSTACLES= 3
 TABLE_X_MIN_MAX = (-0.8,0.8)
 TABLE_Y_MIN_MAX= ((-0.4,0.4))
-RANDOMIZE = False
+RANDOMIZE = True
 
 
 @configclass
@@ -65,12 +67,12 @@ class BasePosePlanningSceneCfg(InteractiveSceneCfg):
     """Configuration for obj tracking state scene."""
 
     
-    ee_frame = FrameTransformerCfg(
-        prim_path="{ENV_REGEX_NS}/Robot/gripper_l_finger_l",
-        target_frames=[
-            FrameTransformerCfg.FrameCfg(prim_path="{ENV_REGEX_NS}/Robot/gripper_l_finger_l")
-        ]
-    ) 
+    #ee_frame = FrameTransformerCfg(
+    #    prim_path="{ENV_REGEX_NS}/Robot/gripper_l_finger_l",
+    #    target_frames=[
+    #        FrameTransformerCfg.FrameCfg(prim_path="{ENV_REGEX_NS}/Robot/gripper_l_finger_l")
+    #    ]
+    #) 
 
     # ground plane
     ground = AssetBaseCfg(
@@ -117,7 +119,7 @@ class BasePosePlanningSceneCfg(InteractiveSceneCfg):
                 "yumi_joint_2_r": -1.84,
                 "yumi_joint_3_r": -0.398,
                 "yumi_joint_4_r": 0.362,
-                "yumi_joint_5_r": -2.114,
+                "yumi_joint_5_r": -1.5,
                 "yumi_joint_6_r": 1.950,
                 "yumi_joint_7_r": 0.129,
                 # yumi right hand
@@ -270,12 +272,13 @@ class BasePosePlanningSceneCfg(InteractiveSceneCfg):
     #        rot = (0,0,0,1),
     #    )) for i in range(NUM_OBSTACLES)}
     #)
-    print(obstacle)
+
 
     camera = CameraCfg(
         prim_path="{ENV_REGEX_NS}/camera", # Camera as world entity
         data_types=["rgb", "distance_to_image_plane", "semantic_segmentation"],
-        height=160,
+        colorize_semantic_segmentation=False,
+        height=160, #Observation space is ([channels, width, heigh])
         width=160,
         spawn=sim_utils.OrthographicCameraCfg(
             focal_length=7.0, 
@@ -351,7 +354,7 @@ class EventCfg:
     )
     
     # Either random table pose, or not
-    if RANDOMIZE:
+    if RANDOMIZE: # If not randomize, make sure robot does not spawn on table, as it breaks the reset
         reset_table_pose = EventTerm(
         func=reset_table,
         mode="reset",
@@ -404,11 +407,6 @@ class EventCfg:
         },
     )
 
-    
-    
-
-    
-
 
 @configclass
 class ActionsCfg:
@@ -434,51 +432,54 @@ class ObservationCfg:
     @configclass
     class PolicyCfg(ObsGroup):
         # Observation space doubles in size when using both RGB and depth
-        rgb = ObsTerm(
-            func = mdp.image,
+        image = ObsTerm(
+            func = custom_image,
             params={"sensor_cfg":SceneEntityCfg("camera"),
-                    #"data_type": "rgb"},
-            }
+                                }
         )
-        print("RGB IN OBSERVATION SPACE")
-        print(rgb)
 
-        depth = ObsTerm(
-            func=mdp.image,
-            params = {"sensor_cfg":SceneEntityCfg("camera"),
-                      "data_type": "distance_to_image_plane"}
-        )
+
+        #depth = ObsTerm(
+        #    func=mdp.image,
+        #    params = {"sensor_cfg":SceneEntityCfg("camera"),
+        #              "data_type": "distance_to_image_plane"}
+        #)
         def __post_init__(self) -> None:
 
             self.enable_corruption = False
 
-            self.concatenate_terms = False
+            self.concatenate_terms = True
 
     policy: PolicyCfg=PolicyCfg()
 
 @configclass
 class RewardsCfg:
 
-    terminating = RewTerm(func = collision, 
+    terminating = RewTerm(func = collision, # Base reward for collision is +1. Weight with negative for penalty
                           params={
                               "robot_cfg": SceneEntityCfg("robot"),
-                             
-                          },
-                          weight= 1.0,
-                          )
-
-    pick_reward = RewTerm(func = pick_reward,
-                         weight = 1.0)
+                            
+                         },
+                         weight= -300.0,
+                        )
+    pick_reward = RewTerm(func = pick_reward, # base value i +1 per picked object
+                         weight = 100.0)
+    
+    nav_reward = RewTerm(func = navcost,
+                         weight= -1.0) # Max reward is approx 180 ish, -1.0 to be penalty, No path penalized with 300 (preliminary)
 
 @configclass
 class TerminationsCfg:
     """Termination terms for the MDP."""
 
     # (1) Time out for exceeding length of episode
-    time_out_el = DoneTerm(func=mdp.time_out, time_out=True)
+    time_out = DoneTerm(func=mdp.time_out, time_out=True)
 
     # (2) Time out for collision 
     time_out_collision = DoneTerm(func=collision_check, params={"threshold": 100.0})
+
+    # (3) Time out for success
+    #time_out_success = DoneTer,(func= success_check, params)
 
 
 @configclass
@@ -521,11 +522,12 @@ class BasePosePlanningEnvCfg(ManagerBasedRLEnvCfg):
         self.rerender_on_reset = True
 
         # viewer settings
-        self.viewer.eye = (-4.9, -4.2, 2.5)
+        self.viewer.eye = (0, 0, 60)
         # simulation settings
         self.sim.physics_dt = 1/60
         self.sim.dt = 1/20 # Step time of environment. Ex, 1 s ep lenght, 1/10 dt would give 10 steps
         self.sim.render_interval = self.decimation
+        
         #self.ik_solver = Kinematic_solver()
         self.scene = BasePosePlanningSceneCfg(num_envs=10, env_spacing=10.0)
         print("num envs: ", self.scene.num_envs)
