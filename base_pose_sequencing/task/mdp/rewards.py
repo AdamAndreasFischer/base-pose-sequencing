@@ -18,7 +18,7 @@ import isaacsim.core.utils.bounds as bounds_utils
 from base_pose_sequencing.utils.collision import check_if_robot_is_in_collision
 from base_pose_sequencing.utils.torch_kinematics import _summarize_results
 from base_pose_sequencing.utils.torch_kinematics import assemble_full_configuration, compute_dual_arm_end_effector_poses, _summarize_results, get_robot_IK, get_robot_chains
-from base_pose_sequencing.utils.common import parse_prim_paths
+from base_pose_sequencing.utils.common import parse_prim_paths, pose_to_pixel, visualize_scene
 from base_pose_sequencing.task.mdp.terminations import collision_check
 from base_pose_sequencing.utils.isaac import set_visibility_multi_object
 from base_pose_sequencing.utils.navigation import parallel_Astar, a_star, visualize_path
@@ -69,34 +69,32 @@ def navcost(env: "ManagerBasedRLEnv",
     Costmap extraction with obstacles
 
     Parallel A* can find paths for 40 envs in roughly 3.5 s, as compared to 36 for sequential
+    
     """
     camera = env.scene["camera"]
     robot = env.scene["robot"]
+
+    
+    raw_robot_poses = robot.data.root_link_state_w[:,:2] #x, y pose
+    origin_poses = env.scene.env_origins[:,:2]
+    robot_goals = raw_robot_poses-origin_poses # Current pose is the goal in the calculation
+    
+    observation_space = env.observation_space["policy"]
+
+    start_pose = env.cfg.prev_robot_pose - origin_poses # Previous robot pose is the start
+    
+
+    starts = pose_to_pixel(env, observation_space=observation_space, poses=start_pose)
+    
+    goals = pose_to_pixel(env,observation_space, poses=robot_goals)
+    
+
     
     costmaps = get_costmap(env, camera)
     
-    goals = torch.randint(low=10, high=20, size=(costmaps.shape[0],2))
-    starts = torch.randint(low=30, high=40, size=(costmaps.shape[0],2))
-    #parallel_time_s = time.time()
-
-
+    
     paths = parallel_Astar(costmaps=costmaps, goal=goals, start=starts, clearance=8)
-    #parallel_time_e = time.time()
-
-    #serial_time_s = time.time()
-    #for i in range(costmaps.shape[0]):
-    #    costmap = costmaps[i].cpu().numpy()
-    #    start = starts[i].cpu().numpy()
-    #    goal = goals[i].cpu().numpy()
-    #    path, id = a_star(costmap, start=(start[0],start[1]), goal=(goal[0],goal[1]), clearance=8, id=i)
-    #serial_time_e = time.time()
-#
-    #print("Parallel time: ", parallel_time_e-parallel_time_s)
-    #print("Serial time: ", serial_time_e-serial_time_s)
-
-  
-    #print("Normal A*: ", path)
-    #print("Parallel A*: ", paths[i])
+   
     
     path_list = list(paths.values())
 
@@ -277,8 +275,6 @@ def pick_reward(env: "ManagerBasedRLEnv",
             objects.write_object_pose_to_sim(far_away_pose, env_ids=env_id, object_ids=object_index.reshape(1))
             reward[env_id] +=1
          
-    print("In pick reward: ", reward)
-    #print(env.cfg.picked_objects)
 
     return reward
 

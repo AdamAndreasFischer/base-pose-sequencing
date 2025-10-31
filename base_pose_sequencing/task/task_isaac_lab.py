@@ -460,13 +460,13 @@ class RewardsCfg:
                               "robot_cfg": SceneEntityCfg("robot"),
                             
                          },
-                         weight= -300.0,
+                         weight= -.0,
                         )
     pick_reward = RewTerm(func = pick_reward, # base value i +1 per picked object
-                         weight = 100.0)
+                         weight = 1.0)
     
     nav_reward = RewTerm(func = navcost,
-                         weight= -1.0) # Max reward is approx 180 ish, -1.0 to be penalty, No path penalized with 300 (preliminary)
+                         weight= -0.01) # Max reward is approx 180 ish, -1.0 to be penalty, No path penalized with 300 (preliminary)
 
 @configclass
 class TerminationsCfg:
@@ -532,6 +532,7 @@ class BasePosePlanningEnvCfg(ManagerBasedRLEnvCfg):
         self.scene = BasePosePlanningSceneCfg(num_envs=10, env_spacing=10.0)
         print("num envs: ", self.scene.num_envs)
         self.picked_objects = torch.zeros((self.scene.num_envs*NUM_OBJECTS,),device="cuda" if torch.cuda.is_available else "cpu", dtype=torch.uint8) # Placeholder to initialize later
+        self.prev_robot_poses = torch.zeros((2,2), device="cuda" if torch.cuda.is_available else "cpu") # Place holder
 
  
 

@@ -17,9 +17,7 @@ class SimpleCNNImageExtractor(BaseFeaturesExtractor):
         super().__init__(observation_space, features_dim)
         # We assume CxHxW images (channels first)
         # Re-ordering will be done by pre-preprocessing or wrapper
-        print("Observation shape in CNN init: ", observation_space)
-        print("Shape of observation space in CNN init: ", observation_space.shape)
-        print("Trans and rot lim: ", trans_lim, " ", rot_lim)
+        
         self.range = th.tensor([trans_lim[-1], trans_lim[-1], rot_lim[-1]], device="cuda" if th.cuda.is_available else "cpu") # Only adding max limit as output in (-1,1)
         
         n_input_channels = observation_space.shape[0]

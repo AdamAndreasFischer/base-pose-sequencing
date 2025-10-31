@@ -9,6 +9,9 @@ import matplotlib.pyplot as plt
 NUM_THREADS = max(1, int(multiprocessing.cpu_count()/2))
 
 def parallel_Astar(costmaps, start, goal, clearance): 
+    """
+    Try to find way to optimize, it is still too slow
+    """
     manager = multiprocessing.Manager()
     costmaps = costmaps.cpu().numpy()
     start = start.cpu().tolist()
@@ -41,8 +44,9 @@ def parallel_Astar(costmaps, start, goal, clearance):
                 future.cancel()
             executor.shutdown(wait=False, cancel_futures=True)
             raise
-
-
+    
+    
+    
     return paths
 
 def is_valid_point(point, grid, clearance):
@@ -134,11 +138,11 @@ def visualize_path(grid, path, start, goal):
     # Plot the path
     if path:
         path = np.array(path)
-        plt.plot(path[:, 1], path[:, 0], color="red", linewidth=2, label="Path")  # Note: (y, x) order
+        plt.plot(path[:, 0], path[:, 1], color="red", linewidth=2, label="Path")  # Note: (y, x) order
 
     # Mark start and goal points
-    plt.scatter(start[1], start[0], color="green", s=100, label="Start")  # (y, x) order
-    plt.scatter(goal[1], goal[0], color="blue", s=100, label="Goal")  # (y, x) order
+    plt.scatter(start[0], start[1], color="green", s=100, label="Start")  # (y, x) order
+    plt.scatter(goal[0], goal[1], color="blue", s=100, label="Goal")  # (y, x) order
 
     plt.legend()
     plt.title("A* Path Planning")

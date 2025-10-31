@@ -139,7 +139,7 @@ def reset_obstacles(env: ManagerBasedRLEnv,
     # set into the physics simulation
     asset.write_root_pose_to_sim(torch.cat([positions, orientations], dim=-1), env_ids=env_ids)
     asset.write_root_velocity_to_sim(velocities, env_ids=env_ids)
-    print("Reset done")
+    
 
 
 def reset_robot_state(env: ManagerBasedRLEnv,
@@ -148,7 +148,7 @@ def reset_robot_state(env: ManagerBasedRLEnv,
         velocity_range: dict[str, tuple[float, float]],
         asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")):
     
-    print("Reset robot")
+    
     joint_indices = [3,4,7,8,9,10,11,12,13,14,16,16,17,18]
     joint_vel = torch.zeros_like(env.cfg.default_joint_angles, device=env.device)
     asset: RigidObject | Articulation = env.scene[asset_cfg.name]
@@ -206,7 +206,7 @@ def reset_obstacles_singular(env: ManagerBasedRLEnv,
         pose_range: dict[str, tuple[float, float]],
         velocity_range: dict[str, tuple[float, float]],
         asset_cfg: SceneEntityCfg = SceneEntityCfg("obstacle")):
-    print("##################### RESET ##########################")
+   
     asset: RigidObject | Articulation | RigidObjectCollection = env.scene[asset_cfg.name]
 
 
@@ -247,7 +247,7 @@ def reset_table(
         pose_range: dict[str, tuple[float, float]],
         velocity_range: dict[str, tuple[float, float]],
         asset_cfg: SceneEntityCfg = SceneEntityCfg("table")):
-    print("Rest table")
+    
     asset: RigidObject | Articulation | RigidObjectCollection = env.scene[asset_cfg.name]
 
     # poses
@@ -332,4 +332,6 @@ def zero_velocities(env: ManagerBasedRLEnv,
 
     table.write_root_velocity_to_sim(torch.zeros_like(table_vel_shape),env_ids=env_ids)
     robot.write_root_velocity_to_sim(torch.zeros_like(table_vel_shape),env_ids=env_ids)
+
+    env.cfg.prev_robot_poses = robot.data.root_link_state_w[:,:2]
 
