@@ -153,7 +153,7 @@ def pick_reward(env: "ManagerBasedRLEnv",
     Function of choosing arm for picking
 
     """
-    
+    terminated = env.termination_manager.terminated
     objects = env.scene["object"]
     obj_poses = objects.data.object_link_state_w[..., :7] # C.O.M states
     reward = torch.zeros((env.num_envs),device=env.device)
@@ -307,8 +307,9 @@ def pick_reward(env: "ManagerBasedRLEnv",
           
             objects.write_object_pose_to_sim(far_away_pose, env_ids=env_id, object_ids=object_index.reshape(1))
             reward[env_id] +=1
-         
-
+    
+    reward[terminated] = 0 # Sets terminated environments to 0
+    
     return reward
 
 
