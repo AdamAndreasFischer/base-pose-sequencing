@@ -2,6 +2,7 @@
 import pytorch_kinematics as pk
 import torch
 import numpy as np
+from scipy.ndimage import binary_dilation
 from scipy.spatial.transform import Rotation
 from typing import TYPE_CHECKING
 import matplotlib.pyplot as plt
@@ -14,14 +15,15 @@ from isaaclab.managers.manager_term_cfg import RewardTermCfg
 from isaaclab.sensors import ContactSensor, RayCaster
 from isaaclab.managers import SceneEntityCfg
 import isaacsim.core.utils.bounds as bounds_utils
+from isaaclab.utils.math import euler_xyz_from_quat
 
 from base_pose_sequencing.utils.collision import check_if_robot_is_in_collision
 from base_pose_sequencing.utils.torch_kinematics import _summarize_results
 from base_pose_sequencing.utils.torch_kinematics import assemble_full_configuration, compute_dual_arm_end_effector_poses, _summarize_results, get_robot_IK, get_robot_chains
-from base_pose_sequencing.utils.common import parse_prim_paths, pose_to_pixel, visualize_scene
+from base_pose_sequencing.utils.common import parse_prim_paths, pose_to_pixel, visualize_scene, compare_pixel_to_world, world_to_pixel
 from base_pose_sequencing.task.mdp.terminations import collision_check
 from base_pose_sequencing.utils.isaac import set_visibility_multi_object
-from base_pose_sequencing.utils.navigation import parallel_Astar, a_star, visualize_path
+from base_pose_sequencing.utils.navigation import parallel_Astar, a_star, visualize_path, a_star_numpy
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
@@ -29,26 +31,33 @@ if TYPE_CHECKING:
 def collision(env: "ManagerBasedRLEnv",
               robot_cfg: SceneEntityCfg= SceneEntityCfg("robot"),
               ):
+    """Checks for collisions and updates termination manager (env.termination_manager.terminated)"""
 
     collisions = collision_check(env, threshold=100).to(torch.uint8)
+    print(env.termination_manager.terminated)
+    #env.termination_manager.terminated = collisions.to(torch.bool)
+
 
     # return 1 for collision, 0 if no collision
 
     return collisions
 
-def get_costmap(env, camera):
-    costmaps = torch.zeros((env.num_envs, 160,160))
-    segmentation_map = env.scene["camera"].data.output["semantic_segmentation"].squeeze(-1)
+def get_costmap(env, camera, env_ids, clearance):
+    costmaps = np.zeros((len(env_ids), 160,160))
+    segmentation_map = env.scene["camera"].data.output["semantic_segmentation"][env_ids].squeeze(-1).cpu().numpy()
     camera_info = camera.data.info
-
+    structure = np.ones((2*clearance+1, 2*clearance+1),dtype=bool)
+    
     for i in range(segmentation_map.shape[0]):
         idToLabels= camera_info[i]["semantic_segmentation"]["idToLabels"]
+        #print(f"env {i}: ", idToLabels)
         costmap = costmaps[i]
         for key,value in idToLabels.items():
          
             if "table" in value or "obstacle" in value:
         
                 costmap[segmentation_map[i]==int(key)] = 1
+        costmap = binary_dilation(costmap>0, structure=structure)
         costmaps[i] = costmap
     
     return costmaps
@@ -70,44 +79,68 @@ def navcost(env: "ManagerBasedRLEnv",
 
     Parallel A* can find paths for 40 envs in roughly 3.5 s, as compared to 36 for sequential
     
+
+    Filters out collided environments
     """
+
+    #compare_pixel_to_world(env=env)
     camera = env.scene["camera"]
     robot = env.scene["robot"]
+    env_ids_raw = torch.arange(0, env.num_envs).to(device=env.device)
+    env_ids = env_ids_raw[env.termination_manager.terminated==False] # removes the calculation for collided environments
+    
+    #Goal poses
+    raw_robot_poses = robot.data.root_link_state_w[env_ids,:2] #x, y pose
+    robot_rotations = robot.data.root_link_state_w[env_ids, 3:7]
+    euler = euler_xyz_from_quat(robot_rotations)
+    z_rot_goal = euler[-1]
+    
+    origin_poses = env.scene.env_origins[env_ids,:2]
 
-    
-    raw_robot_poses = robot.data.root_link_state_w[:,:2] #x, y pose
-    origin_poses = env.scene.env_origins[:,:2]
     robot_goals = raw_robot_poses-origin_poses # Current pose is the goal in the calculation
-    
+    goal_x = robot_goals[:,0]
+    goal_y= robot_goals[:,1]
+
     observation_space = env.observation_space["policy"]
 
-    start_pose = env.cfg.prev_robot_pose - origin_poses # Previous robot pose is the start
+    start_pose = env.cfg.prev_robot_pose
+    start_trans = start_pose[env_ids,:2] - origin_poses # Previous robot pose is the start
     
+    start_x = start_trans[:,0]
+    start_y = start_trans[:,1]
+    start_quats = start_pose[env_ids, 3:7]
+    start_euler = euler_xyz_from_quat(start_quats)
+    z_rot_start = start_euler[-1]
 
-    starts = pose_to_pixel(env, observation_space=observation_space, poses=start_pose)
-    
-    goals = pose_to_pixel(env,observation_space, poses=robot_goals)
-    
+    #starts = pose_to_pixel(env, observation_space=observation_space, poses=start_pose)
+    starts = world_to_pixel(env,start_x, start_y, z_rot_start,env_ids=env_ids)
 
+    #goals = pose_to_pixel(env,observation_space, poses=robot_goals)
+    goals = world_to_pixel(env, goal_x, goal_y, z_rot_goal, env_ids=env_ids)
+  
+    costmaps = get_costmap(env, camera, env_ids,clearance=8)
     
-    costmaps = get_costmap(env, camera)
-    
-    
-    paths = parallel_Astar(costmaps=costmaps, goal=goals, start=starts, clearance=8)
-   
-    
-    path_list = list(paths.values())
+  
+    path_list = []
+ 
+    for i in range(costmaps.shape[0]):
+        start = (starts[i,0].item(), starts[i,1].item())
+        goal = (goals[i,0].item(), goals[i,1].item())
+        
+        costmap = costmaps[i]#.cpu().numpy()
+        path,_ = a_star(costmap, start, goal, clearance=8, id=i)
+        path_list.append(path)
 
-    rewards = torch.zeros((env.num_envs), device=env.device)
-    for i,path in enumerate(path_list):
-        if path == None:
-            rewards[i] =250
-            #print(starts[i])
-            #print(goals[i])
-            #plt.imshow(costmaps[i])
-            #plt.show()
+    visualize_path(costmaps[0], path_list[0], (starts[0,0].cpu(), starts[0,1].cpu()), (goals[0,0].cpu(), goals[0,1].cpu()), env , 0)
+
+    rewards = torch.ones((env.num_envs), device=env.device)*250 # Base reward for no nav path found. I.e collided envs and non path found
+ 
+    for i,env_id in enumerate(env_ids):
+        if path_list[i] == None:
+            rewards[env_id] =250
+          
         else:
-            rewards[i] = len(path)
+            rewards[env_id] = len(path_list[i])
     
     return rewards
 
@@ -146,10 +179,10 @@ def pick_reward(env: "ManagerBasedRLEnv",
     
     # Picked objects. O if not picked, 1 if picked
     picked_objects = env.cfg.picked_objects
-    object_prim_paths = env.scene["object"].root_physx_view.prim_paths
+    #object_prim_paths = env.scene["object"].root_physx_view.prim_paths
 
     obj_indices = torch.arange(0,picked_objects.shape[0], device=env.device, dtype=torch.uint8) # Gives an index to each prim path in the list
-    ordered_paths = sorted(object_prim_paths, key=parse_prim_paths) # Prim paths ordered in after environment
+    #ordered_paths = sorted(object_prim_paths, key=parse_prim_paths) # Prim paths ordered in after environment
 
     # Initialize poses
     

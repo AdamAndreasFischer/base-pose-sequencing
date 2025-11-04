@@ -88,7 +88,7 @@ class MoveBaseAction(ActionTerm):
 
     def apply_actions(self):
         root_state = self._asset.data.root_state_w
-       
+        self._env.cfg.prev_robot_pose = root_state.clone()
         pos_x = self._processed_actions[:, 0]
         pos_y = self._processed_actions[:, 1]
         theta = self._processed_actions[:, 2]
@@ -114,7 +114,7 @@ class MoveBaseAction(ActionTerm):
         root_state[:, :2] = pos[:,:2].to(0)
         root_state[:, 3:7] = rot_quat
 
-        self._env.cfg.prev_robot_pose = self._asset.data.root_link_state_w[:,:2]
+        
 
         self._asset.write_root_pose_to_sim(root_state[:, :7])
 

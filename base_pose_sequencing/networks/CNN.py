@@ -40,7 +40,6 @@ class SimpleCNNImageExtractor(BaseFeaturesExtractor):
     def forward(self, observations: th.Tensor) -> th.Tensor:
         
         x= self.linear(self.cnn(observations))
-        
-        print(x)
+    
 
         return x

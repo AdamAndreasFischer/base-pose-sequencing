@@ -243,9 +243,9 @@ class BasePosePlanningSceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/obstacle",
         spawn = sim_utils.UsdFileCfg(
             usd_path=ROOT_PATH + "base-pose-sequencing/assets/obstacle_contact_sensor.usd",
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity = True,kinematic_enabled=False, rigid_body_enabled=True),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(disable_gravity = False,kinematic_enabled=False, rigid_body_enabled=True),
             mass_props=sim_utils.MassPropertiesCfg(mass=1000.0),
-            collision_props=sim_utils.CollisionPropertiesCfg(collision_enabled=False),
+            collision_props=sim_utils.CollisionPropertiesCfg(collision_enabled=True),
             activate_contact_sensors=True, 
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
@@ -282,14 +282,14 @@ class BasePosePlanningSceneCfg(InteractiveSceneCfg):
         width=160,
         spawn=sim_utils.OrthographicCameraCfg(
             focal_length=7.0, 
-            focus_distance=2.4, 
-            horizontal_aperture=65,
-            vertical_aperture = 65 ,
+            focus_distance=10000, 
+            horizontal_aperture=80,
+            vertical_aperture = 80 ,
             clipping_range=(0.0, 4.5),
              # Changed in file sensors_cfg.py and sensors.py
         ),
         offset=CameraCfg.OffsetCfg(
-            pos=(0, 0.0, 2.8),          # offset relative to base_link frame
+            pos=(0, 0.0, 4.0),          # offset relative to base_link frame
             # rot=(0.5, -0.5, 0.5, -0.5),   # w x y z: -90, 90, 0   (facing forward)    
             rot=rot_utils.euler_angles_to_quats(np.array([-180, 0, 0]), degrees=True), # Downward facing orthographic camera"
             convention="ros"            # or "world/opengl/ros" if you want local frame offset
@@ -460,7 +460,7 @@ class RewardsCfg:
                               "robot_cfg": SceneEntityCfg("robot"),
                             
                          },
-                         weight= -.0,
+                         weight= -1.0,
                         )
     pick_reward = RewTerm(func = pick_reward, # base value i +1 per picked object
                          weight = 1.0)

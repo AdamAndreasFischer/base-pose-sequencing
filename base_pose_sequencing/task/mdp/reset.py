@@ -333,5 +333,5 @@ def zero_velocities(env: ManagerBasedRLEnv,
     table.write_root_velocity_to_sim(torch.zeros_like(table_vel_shape),env_ids=env_ids)
     robot.write_root_velocity_to_sim(torch.zeros_like(table_vel_shape),env_ids=env_ids)
 
-    env.cfg.prev_robot_poses = robot.data.root_link_state_w[:,:2]
+    env.cfg.prev_robot_poses = robot.data.root_link_state_w
 
