@@ -34,7 +34,7 @@ def collision(env: "ManagerBasedRLEnv",
     """Checks for collisions and updates termination manager (env.termination_manager.terminated)"""
 
     collisions = collision_check(env, threshold=100).to(torch.uint8)
-    print(env.termination_manager.terminated)
+    #print(env.termination_manager.terminated)
     #env.termination_manager.terminated = collisions.to(torch.bool)
 
 
@@ -131,7 +131,7 @@ def navcost(env: "ManagerBasedRLEnv",
         path,_ = a_star(costmap, start, goal, clearance=8, id=i)
         path_list.append(path)
 
-    visualize_path(costmaps[0], path_list[0], (starts[0,0].cpu(), starts[0,1].cpu()), (goals[0,0].cpu(), goals[0,1].cpu()), env , 0)
+    #visualize_path(costmaps[0], path_list[0], (starts[0,0].cpu(), starts[0,1].cpu()), (goals[0,0].cpu(), goals[0,1].cpu()), env , 0)
 
     rewards = torch.ones((env.num_envs), device=env.device)*250 # Base reward for no nav path found. I.e collided envs and non path found
  
