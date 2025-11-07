@@ -72,14 +72,17 @@ def test(cfg):
     mdp.move_robot(x, y, theta, yumi_joint_angles=None)
     frame_segment = mdp.camera.get_current_frame()["semantic_segmentation"]
     frame = mdp.camera.get_current_frame()
-   
+    
+    print(mdp.camera.get_intrinsics_matrix())
+ 
     mdp.reset()
     for i in range(50):
         
-      
+        
         r,s = mdp._get_reward()
         mdp.world.step(render=cfg.render)
-     
+       
+        print(mdp.camera.get_intrinsics_matrix())
         
         
         if i %2 == 0 or s == True:

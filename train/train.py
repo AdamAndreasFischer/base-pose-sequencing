@@ -98,7 +98,7 @@ def main():
         }
 
     # post-process agent configuration
-    agent_cfg = process_sb3_cfg(agent_cfg)
+    agent_cfg = process_sb3_cfg(agent_cfg,num_envs = env_cfg.scene.num_envs)
 
     # read configurations about the agent-training
     policy_arch = agent_cfg.pop("policy")

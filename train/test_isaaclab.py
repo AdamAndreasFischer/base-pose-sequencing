@@ -74,24 +74,18 @@ def main():
         n_env = args_cli.num_envs
         env_cfg.scene.num_envs = n_env
 
-        print("Env CFG initialized")
         env_RL = make_env(env_cfg)
         #env = gym.make("Base pose planning", cfg = env_cfg)
         #print(dir(env))
         scene = env_RL.scene
-
+     
         env = Sb3VecEnvWrapper(env_RL)
-        print("Dir of SB3 Environment")
-        print(dir(env))
-        print("Observation space ################################")
-        print(env.observation_space)
-
 
         # Initialize observation space and set it to int
-        if isinstance(env.observation_space, Dict) and len(env.observation_space.keys())==2:
+        if isinstance(env.observation_space, Dict):
             # ensure dtype is uint8 for image detection
             for key in env.observation_space.keys():
-
+                print(key)
                 if env.observation_space[key].dtype != np.uint8:
                     env.observation_space[key] = Box(
                         low=0,
@@ -101,7 +95,6 @@ def main():
                     )
             #env = VecTransposeImage(env)
 
-        print(env.observation_space)
 
         for i in range(300):
 
@@ -118,43 +111,49 @@ def main():
             #env.SceneEntityCfg("camera")["rgb"]
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                env.step(torch.tensor(action_torch))
+                res = env.step(torch.tensor(action_torch))
+            #print(res)
+            print("Reward term: ", res[1])
 
             #for _ in range(15):
             #    env_RL.sim.render()
             #env_RL.sim.step()
             #print(scene["camera"].data.output)
             #env_RL.sim.render(1)
-            #rgb = scene["camera"].data.output["rgb"][0].cpu().numpy()
-            #depth = scene["camera"].data.output["distance_to_image_plane"][0].cpu().numpy()
-            #print(rgb.shape)
-        #
-            #fig, (ax_rgb, ax_depth) = plt.subplots(1, 2, figsize=(10, 4))
-            #ax_rgb.imshow(rgb)
-            #ax_rgb.set_title("RGB")
-            #ax_rgb.axis("off")
-        #
-            #depth_plot = ax_depth.imshow(depth, cmap="viridis")  # “viridis” colormap
-            #ax_depth.set_title("Depth")
-            #ax_depth.axis("off")
-            #fig.colorbar(depth_plot, ax=ax_depth, fraction=0.046, pad=0.04)
-        #
-            #plt.tight_layout()
-            #plt.show()
+            rgb = scene["camera"].data.output["rgb"][0].cpu().numpy()
+            depth = scene["camera"].data.output["distance_to_image_plane"][0].cpu().numpy()
+            print(rgb.shape)
+        
+            fig, (ax_rgb, ax_depth) = plt.subplots(1, 2, figsize=(10, 4))
+            ax_rgb.imshow(rgb)
+            ax_rgb.set_title("RGB")
+            ax_rgb.axis("off")
+        
+            depth_plot = ax_depth.imshow(depth, cmap="viridis")  # “viridis” colormap
+            ax_depth.set_title("Depth")
+            ax_depth.axis("off")
+            fig.colorbar(depth_plot, ax=ax_depth, fraction=0.046, pad=0.04)
+        
+            plt.tight_layout()
+            plt.show()
 
 
 
-        simulation_app.close()
+    
 
     except KeyboardInterrupt: 
         print("Registered Keyboard interuption....")
         print("Shutind down....")
         simulation_app.close()
+        raise
     except Exception as e:
         print(f"Simulator crashed with error: {e}....")
         print(traceback.format_exc())
         print("Shuting down....")
         simulation_app.close()
+        raise
+    simulation_app.close()
+    
 if __name__ == "__main__":
 
     main()

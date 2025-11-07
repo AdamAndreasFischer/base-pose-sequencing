@@ -2,27 +2,27 @@
 from isaacsim import SimulationApp
 
 # This enables a livestream server to connect to when running headless
-#CONFIG = {
-#   # "renderer": "Storm",
-#   "width": 1280,
-#   "height": 720,
-#   "window_width": 1920,
-#   "window_height": 1080,
-#   "headless": False,
-#   "renderer": "RayTracedLighting",
-#   # "display_options": 3286,  # Set display options to show default grid,
-#}
-
 CONFIG = {
-    # "renderer": "Storm",
-    "width": 320,
-    "height": 320,
-    "window_width": 640, 
-    "window_height": 480,
-    "headless": True,
-    "renderer": "RayTracedLighting",
-    # "display_options": 3286,  # Set display options to show default grid,
+   # "renderer": "Storm",
+   "width": 1280,
+   "height": 720,
+   "window_width": 1920,
+   "window_height": 1080,
+   "headless": False,
+   "renderer": "RayTracedLighting",
+   # "display_options": 3286,  # Set display options to show default grid,
 }
+
+#CONFIG = {
+#    # "renderer": "Storm",
+#    "width": 320,
+#    "height": 320,
+#    "window_width": 640, 
+#    "window_height": 480,
+#    "headless": True,
+#    "renderer": "RayTracedLighting",
+#    # "display_options": 3286,  # Set display options to show default grid,
+#}
 print(CONFIG)
 # Start the isaacsim application
 print("########################################################################################################################")
@@ -436,7 +436,7 @@ class Task(Environment):
         # Get the camera intrinsic matrix
         intrinsic_matrix = self.camera.get_intrinsics_matrix()  # Shape: (3, 3)
         # print("Intrinsic matrix:", intrinsic_matrix)
-
+       
         # Note: center of the robot bounding box provided by the detector is not the center of the ridgeback!
 
         w_y = -(pix_x - intrinsic_matrix[0, 2])/ 25.0
@@ -606,7 +606,7 @@ class Task(Environment):
          
             #grasp_poses.append((grasp_pose, obj)) # Tuple to keep track of object and corresponding pose
 
-            print(grasp_pose)
+          
 
             arm_id = self.select_robot_arm_for_grasping(id)
 
@@ -622,10 +622,9 @@ class Task(Environment):
             else:
                 self.lula_kinematics_solver_right.set_robot_base_pose(robot_base_translation, robot_base_orientation)
                 action, success = self.articulation_kinematics_solver_right.compute_inverse_kinematics(target_pos, target_rot)
-            print(action)
-            print(dir(action))
+         
             
-            print(success)
+          
             if success:
                 self.robot.apply_action(action)
                 reward += 100
@@ -690,7 +689,7 @@ class Task(Environment):
         wTt = isaac_pose_to_transformation_matrix(table_pose)
         
         tTo = np.matmul(np.linalg.inv(wTt), wTo_arr) #This gives rotations only around z
-        print(tTo.shape)
+  
         # Debug
         
         ex, ey, ez = Rotation.from_quat([table_pose[1][1], table_pose[1][2], table_pose[1][3], table_pose[1][0]]).as_euler('xyz')

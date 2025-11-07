@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from numba import jit
 NUM_THREADS = max(1, int(multiprocessing.cpu_count()/2))
 
-def parallel_Astar(costmaps, start, goal, clearance, env_ids): 
+def parallel_Astar(costmaps, start, goal, clearance, env_ids): # Deprecated
     """
     Try to find way to optimize, it is still too slow
     """
