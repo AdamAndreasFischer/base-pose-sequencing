@@ -18,15 +18,18 @@ def custom_image(env
         ,sensor_cfg:SceneEntityCfg= SceneEntityCfg("camera")):
     
     """Return an image on form [n_chanels, width, height]"""
-    
     sensor = env.scene.sensors[sensor_cfg.name]
-
+    
+    for i in range(15):
+        env.sim.render()
+    sensor.reset()
+    
     rgb  = sensor.data.output["rgb"]
     depth = sensor.data.output["distance_to_image_plane"]
     
     image = torch.cat([rgb, depth], dim=-1)
 
-    image= image.transpose(3,1) # Transpose in order to 
+    image= image.transpose(3,1) 
  
 
     return image

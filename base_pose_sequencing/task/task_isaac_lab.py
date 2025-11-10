@@ -527,7 +527,10 @@ class BasePosePlanningEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.physics_dt = 1/60
         self.sim.dt = 1/20 # Step time of environment. Ex, 1 s ep lenght, 1/10 dt would give 10 steps
         self.sim.render_interval = self.decimation
-        
+        self.sim.num_renders_on_reset = 15
+        print(self.sim)
+        print("Dir of self.sim: ", dir(self.sim))
+      
         #self.ik_solver = Kinematic_solver()
         self.scene = BasePosePlanningSceneCfg(num_envs=10, env_spacing=10.0)
         print("num envs: ", self.scene.num_envs)
