@@ -1,203 +1,150 @@
-# python libraries
+import argparse
+import math
+from isaaclab.app import AppLauncher
+
+parser = argparse.ArgumentParser(description="Train PPO on ObjTrackingWithRecordedBaseTrajs in IsaacLab using SB3")
+parser.add_argument("--num_envs", type=int, default=10, help="Number of parallel envs")
+AppLauncher.add_app_launcher_args(parser)
+args_cli = parser.parse_args()
+
+app_launcher = AppLauncher(args_cli)
+simulation_app = app_launcher.app
+
+# -----------------------------------------------------------------------------
+"""Rest everything follows."""
+
+import gymnasium as gym
+from gymnasium.spaces import Box, Dict
 import numpy as np
+import os
+import random
+from datetime import datetime
 import torch
 import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-from tqdm import trange
-import sys
-import random
-import argparse
-import datetime
-import pathlib
-# from pympler import asizeof
-
-
-import hydra
-from omegaconf import DictConfig, OmegaConf
-import os
-import tracemalloc
-
-
-from mushroom_rl.approximators.parametric import TorchApproximator
-from mushroom_rl.core import Core, Logger
-from mushroom_rl.environments import *
-from mushroom_rl.rl_utils.parameters import LinearParameter, Parameter
-from mushroom_rl.rl_utils.replay_memory import PrioritizedReplayMemory, ReplayMemory
-from mushroom_rl.algorithms.policy_search.policy_gradient import REINFORCE
-from mushroom_rl.policy import BoltzmannTorchPolicy, Policy
-# from mushroom_rl.algorithms.actor_critic import SAC
-from mushroom_rl.policy import EpsGreedy
-from mushroom_rl.rl_utils import LinearParameter
-
-from base_pose_sequencing.task.task import Task
-from visual_mm_planning.algorithms.sac_discrete_etn import SAC
-from visual_mm_planning.algorithms.dqn_etn import AbstractDQN
-from visual_mm_planning.networks.optimize_base_pose_etn import ActorNetwork, CriticNetwork, DuelingQNetwork
 
 
 
-def get_stats(dataset, logger):
-    score = dataset.compute_metrics()
-    logger.info(('min_reward: %f, max_reward: %f, mean_reward: %f,'
-                ' median_reward: %f, games_completed: %d' % score))
+from isaaclab_rl.sb3 import Sb3VecEnvWrapper, process_sb3_cfg
+from stable_baselines3 import PPO
+from stable_baselines3.common.callbacks import CheckpointCallback
+from stable_baselines3.common.logger import configure
+from stable_baselines3.common.vec_env import VecNormalize, VecTransposeImage
+from gymnasium.spaces import Box
 
-    return score
-    
+from isaaclab.envs import (
+    DirectMARLEnv,
+    ManagerBasedRLEnv,
+    DirectMARLEnvCfg,
+    DirectRLEnvCfg,
+    ManagerBasedRLEnvCfg,
+    multi_agent_to_single_agent,
+)
+from isaaclab.utils.dict import print_dict
+from isaaclab.utils.io import dump_pickle, dump_yaml
 
-def experiment(cfg, alg):
-    np.random.seed()
+import isaaclab_tasks  # noqa: F401
+from isaaclab_tasks.utils.hydra import hydra_task_config
 
-    # tracemalloc.start()
-
-    logger = Logger(alg.__name__, results_dir=cfg.task.train.save_dir)
-    logger.strong_line()
-    logger.info('Experiment Algorithm: ' + alg.__name__)
-
-    # MDP
-    mdp = Task(cfg)
-  
-    print('observation space:', mdp.info.observation_space.shape)
-    print('action space:', mdp.info.action_space.shape)
-
-    n_epochs=1000 
-    n_steps=5 
-    
-    
-    # Settings
-    n_steps_test=5
-    initial_replay_size = 10
-    max_replay_size = 500 #4000 This will require approx 25 GB of RAM. RTX 4070 has 12 GB VRAM. Max buffer size ~500
-    batch_size = 16
-    n_features = 128
-    warmup_transitions = 500
-    tau = 0.001
-    lr_alpha = 3e-4
-    n_steps_per_fit = 2
-    dqn_target_update_frequency = 8
-    
-
-    
-
-    # Test settings
-    # n_steps_test = 2
-    # initial_replay_size = 2
-    # max_replay_size = 4
-    # batch_size = 4
-    # n_features = 128
-    # warmup_transitions = 2
-    # tau = 0.001
-    # lr_alpha = 3e-4
-    # n_steps_per_fit = 2
-
-    # Approximator
-    actor_input_shape = mdp.info.observation_space.shape
-    
-    
-    actor_map_params = dict(network=ActorNetwork,
-                                input_shape=actor_input_shape,
-                                output_shape=mdp.info.action_space.shape,
-                                n_features=n_features,
-                                state_shape=mdp.info.observation_space.shape,
-                                action_shape=mdp.info.action_space.shape)
-    actor_kernel_params = dict(network=ActorNetwork,
-                                input_shape=actor_input_shape,
-                                output_shape=mdp.info.action_space.shape,
-                                n_features=n_features,
-                                state_shape=mdp.info.observation_space.shape,
-                                action_shape=mdp.info.action_space.shape) #Only necesarry if we want to tweak actor networks separately
- 
-    actor_optimizer = {'class': optim.Adam,
-                       'params': {'lr': 5e-4}}
-
-    critic_input_shape = (actor_input_shape[0] + mdp.info.action_space.shape[0],)
-    critic_state_shape = (4,160,160)
-    critic_params = dict(network=CriticNetwork,
-                         optimizer={'class': optim.Adam,
-                                    'params': {'lr': 5e-4}},
-                         loss=F.mse_loss,
-                         output_shape=(1,),
-                         n_features=n_features,
-                         input_shape=critic_input_shape,
-                         state_shape= critic_state_shape,# mdp.info.observation_space.shape,
-                         action_shape=mdp.info.action_space.shape)
-
-    dueling_Q_params = dict(network = DuelingQNetwork,
-                            input_shape = mdp.info.action_space.shape,
-                            action_shape = mdp.info.action_space.shape,
-                            output_shape = mdp.info.action_space.shape,
-                            hidden_shape = mdp.info.action_space.shape 
-                            )
-    # Agent 
-    #agent = alg(mdp.info, actor_map_params, actor_kernel_params,
-    #            actor_optimizer, critic_params, batch_size, initial_replay_size,
-    #            max_replay_size, warmup_transitions, tau, lr_alpha,
-    #            critic_fit_params=None, target_entropy=None)
-    dqn_replay_buffer = {'class': ReplayMemory,
-                         'params': {'alpha':0.6, 'beta': 0.4}}
-    
- 
-    dqn_agent = alg(mdp.info, approximator_params =  actor_map_params, policy_optimizer= actor_optimizer,batch_size= batch_size, target_update_frequency = dqn_target_update_frequency, 
-                    initial_replay_size= initial_replay_size, max_replay_size= max_replay_size, replay_memory =dqn_replay_buffer, dueling_Q_params= dueling_Q_params )
-    agent = dqn_agent
-    if cfg.task.train.enable_q_priors:
-        agent.initialize_q_prior(cfg.path_prefix)
-
-    if cfg.task.train.enable_action_priors:
-        agent.initialize_action_prior(cfg.path_prefix)
-
-    # Algorithm
-    core = Core(agent, mdp)
-
-    # RUN
-    dataset = core.evaluate(n_steps=n_steps_test, render=False)
-
-    J = np.mean(dataset.discounted_return)
-    R = np.mean(dataset.undiscounted_return)
-    E = "N/A"# agent.policy.entropy(dataset.state).item()
-
-    # del dataset
-
-    logger.epoch_info(0, J=J, R=R, entropy=E)
-
-    dataset = core.learn(n_steps=initial_replay_size, n_steps_per_fit=initial_replay_size, quiet=True)
-    del dataset
-
-    for n in trange(n_epochs, leave=False):
-        dataset = core.learn(n_steps=n_steps, n_steps_per_fit=n_steps_per_fit, quiet=True)
-        del dataset
-        with torch.no_grad():
-            dataset = core.evaluate(n_steps=n_steps_test, render=False, quiet=True)
-
-        J = np.mean(dataset.discounted_return)
-        R = np.mean(dataset.undiscounted_return)
-        E = "N/A"# agent.policy.entropy(dataset.state).item()
-
-        logger.epoch_info(n+1, J=J, R=R, entropy=E)
-
-        # Save the agent after each epoch
-        agent.save(os.path.join(cfg.path_prefix + cfg.task.train.save_dir, f"dqn_agent_epoch.msh"))
-        
-
-        # NOTE: Dataset size is close to 300 MB for 50 samples, replay memory seems to be a pointer so cannot be directly measured but it east up the RAM
-        # dataset_size = asizeof.asizeof(dataset)
-        # print(f"Dataset size: {dataset_size} bytes ({dataset_size / (1024 ** 2):.2f} MB)")
-
-        del dataset
-
-        # print("Memory allocation:", tracemalloc.get_traced_memory())
-    
-    # tracemalloc.stop()
+from base_pose_sequencing.task.task_isaac_lab import BasePosePlanningEnvCfg
+from base_pose_sequencing.networks.CNN import SimpleCNNImageExtractor
 
 
-    mdp.shutdown()
+# -----------------------------------------------------------------------------
+def make_env(cfg):
+    """Factory for RL Games envs."""
+    env = ManagerBasedRLEnv(cfg=cfg)
+    return env
+
+from gymnasium import ObservationWrapper
 
 
-@hydra.main(version_base=None, config_path="../conf", config_name="config")
-def main(cfg : DictConfig) -> None:
-    config = OmegaConf.to_yaml(cfg)
-    print(type(config))
-    experiment(cfg, alg=SAC)
+def main():
+    # configure env
+    env_cfg = BasePosePlanningEnvCfg(root_path="/home/adamfi/codes/")
+    env_cfg.scene.num_envs = args_cli.num_envs
+    env_cfg.sim.device = args_cli.device
+    env_cfg.root_path = "/home/adamfi/codes/"
 
-if __name__ == '__main__':
+    env = make_env(env_cfg)
+
+    policy_kwargs = dict(
+        activation_fn= nn.LeakyReLU, #Allows for some negative numbers as well
+        net_arch=[dict(pi=[128, 32], vf=[128, 32])], #pi is net arch for policy network, vf is net arch for value network
+        squash_output= False,
+        features_extractor_class=SimpleCNNImageExtractor,
+        features_extractor_kwargs=dict(features_dim=3,trans_lim=(-2.5,2.5),rot_lim=(-torch.pi, torch.pi)),
+    )
+
+
+    agent_cfg = {
+        "seed":42,
+        "n_timesteps":10000000.0,
+        # "policy":"MlpPolicy",
+        "policy":"CnnPolicy",
+        "n_steps": 512, #8, # 16
+        "batch_size": 128, #256, # 4096
+        "gae_lambda":0.95,
+        "gamma":0.999,
+        "n_epochs": 10, #20,
+        "ent_coef":0.01,
+        "learning_rate":0.0003,
+        "clip_range":0.2,
+        "policy_kwargs": policy_kwargs,
+        "vf_coef":0.5,
+        "max_grad_norm":0.5,
+        "device":"cuda:0",
+        "normalize_input": False,
+        "normalize_reward": False,
+        }
+
+    # post-process agent configuration
+    agent_cfg = process_sb3_cfg(agent_cfg,num_envs = env_cfg.scene.num_envs)
+
+    # read configurations about the agent-training
+    policy_arch = agent_cfg.pop("policy")
+    n_timesteps = agent_cfg.pop("n_timesteps")
+
+    # For custom policy networks, check: 
+    # https://stable-baselines3.readthedocs.io/en/v1.0/guide/custom_policy.html 
+
+
+    # wrap around environment for rl-games
+    env = Sb3VecEnvWrapper(env)
+    env.action_space = Box(low= np.array([-2.5, -2.5, -np.pi]), high=np.array([2.5,2.5,np.pi]))
+
+    if isinstance(env.observation_space, Dict):
+        # ensure dtype is uint8 for image detection
+        for key in env.observation_space.keys():
+
+            if env.observation_space[key].dtype != np.uint8:
+                env.observation_space[key] = Box(
+                    low=0,
+                    high=255,
+                    shape=env.observation_space[key].shape,
+                    dtype=np.uint8
+                )
+        env = VecTransposeImage(env) # Transpose the observation to take chanels first, then W, H
+    print("Env observation space: ", env.observation_space)
+    normalize_input = agent_cfg.pop("normalize_input", False)
+    normalize_reward = agent_cfg.pop("normalize_reward", False)
+
+    clip_obs = agent_cfg.pop("clip_obs",np.inf)
+
+    run_info = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    log_root_path = os.path.abspath(os.path.join("logs", "sb3", "base_pose_planning"))
+    print(f"[INFO] Logging experiment in directory: {log_root_path}")
+    print(f"Exact experiment name requested from command line: {run_info}")
+    log_dir = os.path.join(log_root_path, run_info)
+    print("In main: ", policy_arch)
+    agent = PPO(policy_arch, env, verbose=1, **agent_cfg)
+
+    new_logger = configure(log_dir, ["stdout", "tensorboard"])
+    agent.set_logger(new_logger)
+
+    checkpoint_callback = CheckpointCallback(save_freq=1000, save_path=log_dir, name_prefix="model", verbose=2)
+    agent.learn(total_timesteps=n_timesteps, callback=checkpoint_callback)
+    env.close()
+
+if __name__=="__main__":
     main()
+    simulation_app.close()

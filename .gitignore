@@ -1,2 +1,11 @@
 base_pose_sequencing.egg-info/
+base_pose_sequencing/task/__pycache__/__init__.cpython-310.pyc
+base_pose_sequencing/task/__pycache__/task.cpython-310.pyc
+base_pose_sequencing/utils/__pycache__/__init__.cpython-310.pyc
+base_pose_sequencing/utils/__pycache__/collision.cpython-310.pyc
+base_pose_sequencing/utils/__pycache__/isaac.cpython-310.pyc
+base_pose_sequencing/__pycache__/
+*.pyc
+*.egg-info
+*.thumbs
 
