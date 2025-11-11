@@ -1,24 +1,46 @@
 import numpy as np
 from matplotlib import pyplot as plt
-import hydra
-from omegaconf import DictConfig, OmegaConf
-import os
-from shapely.geometry import Polygon
-import math
-import networkx as nx
 
-from math import pi
-from shapely.ops import linemerge, unary_union, polygonize
-from shapely.geometry import LineString, Polygon, Point, box
-from shapely.ops import split
+import torch
 
-import matplotlib.cm as cm
-import matplotlib
-from tqdm import tqdm
 from scipy.spatial.transform import Rotation
 from typing import Union
 from pxr import Sdf, Usd, UsdGeom
 
+from collections.abc import Sequence
+import isaacsim.core.utils.prims as prim_utils
+import isaaclab.sim as sim_utils
+
+from pxr import Gf, Sdf
+
+
+import isaaclab.sim as sim_utils
+
+from isaaclab.assets import (
+
+    Articulation,
+
+    ArticulationCfg,
+
+    AssetBaseCfg,
+
+    RigidObject,
+
+    RigidObjectCfg,
+
+    RigidObjectCollection,
+
+    RigidObjectCollectionCfg,
+
+)
+
+from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
+
+from isaaclab.sim import SimulationContext
+
+from isaaclab.utils import Timer, configclass
+
+from isaaclab.utils.assets import ISAACLAB_NUCLEUS_DIR
 
 def get_visibility_attribute(
     stage: Usd.Stage, prim_path: str
@@ -91,3 +113,51 @@ def get_transformation_matrix(pose_s, pose_d):
     sTw = np.linalg.inv(wTs)
     sTd = np.matmul(sTw, wTd)
     return sTd
+
+
+def generate_object_collection(num_obj, root_path,path):
+    ridgid_objects= {}
+
+    for i in range(num_obj):
+
+        name = "object_"+str(i)
+        obj = RigidObjectCfg(
+            prim_path = f"{path}/Object_{i}",
+            spawn=sim_utils.UsdFileCfg(
+                usd_path=root_path + "base-pose-sequencing/assets/cube.usd",
+                rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=False, rigid_body_enabled=True),
+                mass_props=sim_utils.MassPropertiesCfg(mass=0.0),
+                collision_props=sim_utils.CollisionPropertiesCfg(),
+            ),
+            init_state = RigidObjectCfg.InitialStateCfg(
+                pos=(0.75, 0.6-i/10, 0.525), #TEST remove -i later
+                rot=(0, 0, 0, 1),
+            ))
+        ridgid_objects[name] = obj
+    return ridgid_objects
+
+
+def set_visibility_multi_object(visible: bool, prim_paths:str|list|None= None,  env_ids: Sequence[int] | None = None):
+    """This does not work well. Change to moving the obstacles far away instead"""
+    if visible:
+        attribute = "inherited"
+    else:
+        attribute = "invisible"
+
+    if isinstance(prim_paths, list):
+        # iterate over the environment ids
+        for prim_path in prim_paths:
+            prim = sim_utils.find_matching_prims(prim_path)[0]
+            prim_utils.set_prim_visibility(prim, visible)
+    else:
+        prim = sim_utils.find_matching_prims(prim_paths)
+        
+        prim_utils.set_prim_visibility(prim[0], visible)
+
+def move_object_out_of_view(object: RigidObject|None = None, env_ids: Sequence[int]|None = None):
+    """Moves object out of view as visibility change is not supported on GPU physix"""
+
+
+
+    dump = torch.tensor([99.0,99.0,1.0]) # Dump unwanted objects in a corner far away
+
