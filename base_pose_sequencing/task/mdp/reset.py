@@ -68,7 +68,7 @@ def reset_object_state_uniform(
     positions_local =  rand_samples[:,:, 0:3]+ z_offset # + origins
 
     # Transform poses with table rotation as to match x and y limits
-    positions_rotated = math_utils.quat_rotate(root_states[:,:,3:7], positions_local)
+    positions_rotated = math_utils.quat_apply(root_states[:,:,3:7], positions_local)
     
     positions = root_states[:,:, 0:3] +positions_rotated
 
@@ -189,11 +189,11 @@ def reset_robot_state(env: ManagerBasedRLEnv,
             forces_world = env.scene["contact_forces_robot"].data.force_matrix_w 
         forces_env = forces_world[local_env_ids].squeeze(1) # Squeeze to remove dimenison that show ammount of bodies in sensor (?. I think it corresponds to how many meshes are connected to it?
         
-        force_detection = (forces_env==0.).all(dim=(1,2)).to(dtype=torch.uint8)
+        force_detection = (forces_env==0.).all(dim=(1,2)).to(dtype=torch.bool)
 
-        if torch.any(force_detection!=1):
+        if torch.any(force_detection!=True):
         
-            local_env_ids = local_env_ids[(1-force_detection)]
+            local_env_ids = local_env_ids[(~force_detection)]
             
             
         else:
@@ -291,12 +291,12 @@ def reset_table(
         forces_world = env.scene["contact_forces_table"].data.force_matrix_w 
         forces_env = forces_world[local_env_ids].squeeze(1) # Squeeze to remove dimenison that show ammount of bodies in sensor (?. I think it corresponds to how many meshes are connected to it?
     
-        force_detection = (forces_env==0.).all(dim=(1,2)).to(dtype=torch.uint8)
+        force_detection = (forces_env==0.).all(dim=(1,2)).to(dtype=torch.bool)
     
 
-        if torch.any(force_detection!=1):
+        if torch.any(force_detection!=True):
         
-            local_env_ids = local_env_ids[(1-force_detection)]
+            local_env_ids = local_env_ids[(~force_detection)]
             
         else:
             not_suitable_pose = False

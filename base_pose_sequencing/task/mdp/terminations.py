@@ -21,7 +21,4 @@ def collision_check(env:ManagerBasedRLEnv,threshold: float):
     xy_forces = robot_forces[:,:,:2].abs()
     contact_mask = (xy_forces>threshold).any(dim=-1)
     collision = contact_mask.any(dim=-1)
-    if torch.any(collision==1):
-        print("Collision")
-        print(collision)
     return collision
