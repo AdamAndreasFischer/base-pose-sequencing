@@ -130,24 +130,6 @@ class Args:
     """the number of iterations (computed in runtime)"""
 
 
-#def make_env(env_id, idx, capture_video, run_name, gamma):
-#    def thunk():
-#        if capture_video and idx == 0:
-#            env = gym.make(env_id, render_mode="rgb_array")
-#            env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
-#        else:
-#            env = gym.make(env_id)
-#        env = gym.wrappers.FlattenObservation(env)  # deal with dm_control's Dict observation space
-#        env = gym.wrappers.RecordEpisodeStatistics(env)
-#        env = gym.wrappers.ClipAction(env)
-#        env = gym.wrappers.NormalizeObservation(env)
-#        env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10))
-#        env = gym.wrappers.NormalizeReward(env, gamma=gamma)
-#        env = gym.wrappers.TransformReward(env, lambda reward: np.clip(reward, -10, 10))
-#        return env
-#
-#    return thunk
-
 
 def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     torch.nn.init.orthogonal_(layer.weight, std)
@@ -167,9 +149,9 @@ class Agent(nn.Module):
         return self.critic(x)
 
     def get_action_and_value(self, x, action=None):
-        rgb = x[0,:3].to(dtype=torch.uint8).cpu().numpy().T
-        plt.imshow(rgb)
-        plt.show()
+        #rgb = x[0,:3].to(dtype=torch.uint8).cpu().numpy().T
+        #plt.imshow(rgb)
+        #plt.show()
         action_mean = self.actor_mean(x)
         action_logstd = self.actor_logstd.expand_as(action_mean)
         action_std = torch.exp(action_logstd)
@@ -335,7 +317,7 @@ def main():
         for epoch in range(args.update_epochs):
             np.random.shuffle(b_inds)
             for start in range(0, args.batch_size, args.minibatch_size):
-                print(args.minibatch_size)
+                
                 end = start + args.minibatch_size
                 mb_inds = b_inds[start:end]
             
